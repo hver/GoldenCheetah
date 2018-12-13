@@ -228,7 +228,7 @@ class BikeStress : public RideMetric {
     void compute(RideItem *item, Specification, const QHash<QString,RideMetric*> &deps) {
 
         // run, swim or no zones
-        if (item->isSwim || item->isRun ||
+        if (item->isSwim ||
            !item->context->athlete->zones(item->isRun) || item->zoneRange < 0) {
             setValue(RideFile::NIL);
             setCount(0);
@@ -261,7 +261,7 @@ class BikeStress : public RideMetric {
         setValue(score);
     }
 
-    bool isRelevantForRide(const RideItem*ride) const { return (!ride->isRun && !ride->isSwim); }
+    bool isRelevantForRide(const RideItem*ride) const { return ride->present.contains("P") || (!ride->isRun && !ride->isSwim); }
     MetricClass classification() const { return Undefined; }
     MetricValidity validity() const { return Unknown; }
     RideMetric *clone() const { return new BikeStress(*this); }
@@ -290,7 +290,7 @@ class TSSPerHour : public RideMetric {
     void compute(RideItem *item, Specification, const QHash<QString,RideMetric*> &deps) {
 
         // doesn't apply to swims or runs
-        if (item->isSwim || item->isRun) {
+        if (item->isSwim) {
             setValue(RideFile::NIL);
             setCount(0);
             return;
@@ -315,7 +315,7 @@ class TSSPerHour : public RideMetric {
         setCount(duration->value(true));
     }
 
-    bool isRelevantForRide(const RideItem*ride) const { return (!ride->isRun && !ride->isSwim); }
+    bool isRelevantForRide(const RideItem*ride) const { return ride->present.contains("P") || (!ride->isRun && !ride->isSwim); }
     MetricClass classification() const { return Undefined; }
     MetricValidity validity() const { return Unknown; }
     RideMetric *clone() const { return new TSSPerHour(*this); }
@@ -340,7 +340,7 @@ class EfficiencyFactor : public RideMetric {
         setMetricUnits(tr(""));
         setImperialUnits(tr(""));
         setPrecision(3);
-        setDescription(tr("The ratio between IsoPower and Average HR for Cycling and xPace (in yd/min) and Average HR for Running"));
+        setDescription(tr("The ratio between IsoPower and Average HR"));
     }
 
     void compute(RideItem *item, Specification, const QHash<QString,RideMetric*> &deps) {
@@ -348,15 +348,11 @@ class EfficiencyFactor : public RideMetric {
         assert(deps.contains("coggan_np"));
         assert(deps.contains("xPace"));
         assert(deps.contains("average_hr"));
-        if (item->isRun && deps.value("coggan_np")->value() == 0) {
-            RideMetric *xPace = dynamic_cast<RideMetric*>(deps.value("xPace"));
-            assert(xPace);
-            ef = xPace->value(true) > 0 ? ((1000.0/METERS_PER_YARD) / xPace->value(true)) : 0.0;
-        } else {
-            IsoPower *np = dynamic_cast<IsoPower*>(deps.value("coggan_np"));
-            assert(np);
-            ef = np->value(true);
-        }
+
+        IsoPower *np = dynamic_cast<IsoPower*>(deps.value("coggan_np"));
+        assert(np);
+        ef = np->value(true);
+
         RideMetric *ah = dynamic_cast<RideMetric*>(deps.value("average_hr"));
         assert(ah);
         ef = ah->value(true) > 0 ? ef / ah->value(true) : 0.0;
