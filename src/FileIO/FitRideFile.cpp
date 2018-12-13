@@ -303,8 +303,26 @@ struct FitFileReaderState
         return f;
     }
 
-    void DumpFitValue(const FitValue& v) {
-        printf("type: %d %llx %s\n", v.type, v.v, v.s.c_str());
+    void DumpFitValue(const FitValue& value) {
+        if (value.type == SingleValue) {
+            printf( "type: SingleValue, ");
+            if (value.v == NA_VALUE)
+                printf( "value=NA\n");
+            else
+                printf( "value=%lld\n", value.v );
+        }
+        else if (value.type == StringValue)
+            printf( "type: StringValue, value=%s\n", value.s.c_str() );
+        else if (value.type == ListValue) {
+            printf( "type: ListValue, values=");
+            for (int i=0;i<value.list.count();i++) {
+                if (value.v == NA_VALUE)
+                    printf( "NA,");
+                else
+                    printf( "%lld,", value.list.at(i) );
+            }
+            printf( "\n");
+        }
     }
 
     void convert2Run() {
@@ -689,6 +707,61 @@ struct FitFileReaderState
         rideFile->setDeviceType(getManuProd(manu, prod));
     }
 
+
+    void decodePhysiologicalMetrics(const FitDefinition &def, int,
+                                    const std::vector<FitValue>& values) {
+        int i = 0;
+
+        foreach(const FitField &field, def.fields) {
+            fit_value_t value = values[i++].v;
+
+
+            if( value == NA_VALUE )
+                continue;
+
+            switch (field.num) {
+                case 7:   // METmax: 1 METmax = VO2max * 3.5, scale 65536
+                    printf("vo2max: %4.2f \n",value / 65536.0 * 3.5);
+                    rideFile->setTag("VO2max watch", QString::number(value / 65536.0 * 3.5));
+                    break;
+
+                case 4:   // Aerobic Training Effect, scale 10
+                    printf("Aerobic Training Effect %4.1f \n",value/10.0);
+                    rideFile->setTag("Aerobic Training Effect", QString::number(value/10.0));
+                    break;
+
+                case 20:   // Anaerobic Training Effect, scale 10
+                    printf("Anaerobic Training Effect %4.1f \n",value/10.0);
+                    rideFile->setTag("Anerobic Training Effect", QString::number(value/10.0));
+                    break;
+
+                case 9:   // Recovery Time, minutes
+                    printf("Recovery Time, hours %4.1f \n",value/60.0);
+                    rideFile->setTag("Recovery Time", QString::number(value/60.0));
+                    break;
+
+                case 17:   // Performance Condition
+                    printf("Performance Condition: %lld \n",value);
+                    rideFile->setTag("Performance Condition", QString::number(value));
+                    break;
+
+                case 14:   // Running Lactate Threshold Heart Rate, bpm
+                    if(rideFile->isRun()){
+                       printf("Running Lactate Threshold Heart Rate: %lld \n",value);
+                       rideFile->setTag("LTHR watch", QString::number(value));
+                    }
+                    break;
+
+                default: ; // do nothing
+            }
+
+
+            if (FIT_DEBUG && FIT_DEBUG_LEVEL>1) {
+                printf("decodePhysiologicalMetrics  field %d: %d bytes, num %d, type %d\n", i, field.size, field.num, field.type );
+            }
+        }
+    }
+
     void decodeSession(const FitDefinition &def, int,
                        const std::vector<FitValue>& values) {
         int i = 0;
@@ -909,6 +982,14 @@ struct FitFileReaderState
                     rideFile->setTag("Pool Length", // in meters
                                       QString("%1").arg(pool_length*1000.0));
                     break;
+
+                case 24: // total training effect
+                    printf("Total aerobic training effect: %4.1f \n", value/10.0);
+                break;
+
+                case 137: // total anaerobic effect
+                    printf("Total anaerobic training effect: %4.1f \n", value/10.0);
+                break;
 
                 // other fields are ignored at present
                 case 253: //timestamp
@@ -2787,6 +2868,9 @@ struct FitFileReaderState
                     decodeDeveloperFieldDescription(def, time_offset, values);
                     break;
 
+                case 140: /* undocumented Garmin specific metrics */
+                    decodePhysiologicalMetrics(def, time_offset, values);
+                    break;
 
                 case 1: /* capabilities, device settings and timezone */ break;
                 case 2: decodeDeviceSettings(def, time_offset, values); break;
@@ -2836,7 +2920,6 @@ struct FitFileReaderState
                 case 125: /* unknown */
                 case 131: /* cadence zone */
 
-                case 140: /* unknown */
                 case 141: /* unknown */
                 case 145: /* memo glob */
                 case 147: /* equipment (undocumented) = sensors presets (sensor name, wheel circumference, etc.)  ; see details below: */
