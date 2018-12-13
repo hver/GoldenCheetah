@@ -745,10 +745,10 @@ struct FitFileReaderState
                     rideFile->setTag("Performance Condition", QString::number(value));
                     break;
 
-                case 14:   // Running Lactate Threshold Heart Rate, bpm
-                    if(rideFile->isRun()){
-                       printf("Running Lactate Threshold Heart Rate: %lld \n",value);
-                       rideFile->setTag("LTHR watch", QString::number(value));
+                case 14:   // If watch detected Running Lactate Threshold Heart Rate, bpm
+                    if(rideFile->isRun() && value > 0){
+                        printf("Detected Running Lactate Threshold Heart Rate: %lld \n",value);
+                        rideFile->setTag("LTHR detected", QString::number(value));
                     }
                     break;
 
