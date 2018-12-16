@@ -2842,7 +2842,7 @@ struct FitFileReaderState
                     decodeDeveloperFieldDescription(def, time_offset, values);
                     break;
 
-                case 140: /* undocumented Garmin specific metrics */
+                case 140: /* undocumented Garmin/Firstbeat specific metrics */
                     decodePhysiologicalMetrics(def, time_offset, values);
                     break;
 
