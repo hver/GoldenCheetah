@@ -721,8 +721,8 @@ struct FitFileReaderState
 
             switch (field.num) {
                 case 7:   // METmax: 1 METmax = VO2max * 3.5, scale 65536
-                    printf("vo2max: %4.2f \n",value / 65536.0 * 3.5);
-                    rideFile->setTag("VO2max watch", QString::number(value / 65536.0 * 3.5));
+                    printf("VO2max detected: %4.2f \n",value / 65536.0 * 3.5);
+                    rideFile->setTag("VO2max detected", QString::number(value / 65536.0 * 3.5));
                     break;
 
                 case 4:   // Aerobic Training Effect, scale 10
@@ -2868,7 +2868,7 @@ struct FitFileReaderState
                     decodeDeveloperFieldDescription(def, time_offset, values);
                     break;
 
-                case 140: /* undocumented Garmin specific metrics */
+                case 140: /* undocumented Garmin/Firstbeat specific metrics */
                     decodePhysiologicalMetrics(def, time_offset, values);
                     break;
 
