@@ -134,7 +134,6 @@
 // Location of Python Installation - follows PYTHONHOME semantics
 #define GC_PYTHON_HOME                       "<system>pythonhome"
 
-
 // --------------------------------------------------------------------
 // Global Properties - Stored in "root" of the active Athlete Directory
 // --------------------------------------------------------------------

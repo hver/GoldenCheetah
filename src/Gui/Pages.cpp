@@ -364,6 +364,7 @@ GeneralPage::saveClicked()
     appsettings->setValue(GC_EMBED_PYTHON, embedPython->isChecked());
 #endif
 
+
     qint32 state=0;
 
     // general stuff changed ?
