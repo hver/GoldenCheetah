@@ -159,15 +159,15 @@ TabView::ourStyleSheet()
     return QString::fromUtf8("QScrollBar { background-color: %1; border: 0px; }"
 #ifndef Q_OS_MAC
            "QTabWidget { background: %1; }"
-           "QTabWidget::pane { border: 1px solid %2; } "
+           "QTabWidget::pane { border: 1px solid %3; } "
            "QTextEdit { background: %1; }"
-           "QTextEdit#metadata { background: %3; }"
+           "QTextEdit#metadata { background: %4; }"
 #endif
            "QTreeView { background: %1; }"
            "QScrollBar:vertical {"
            "    border: 0px solid darkGray; "
            "    background:%1;"
-           "    width: %4px;    "
+           "    width: %2px;    "
            "    margin: 1px 1px 1px 1px;"
            "}"
            "QScrollBar::handle:vertical:enabled:hover {"
@@ -190,7 +190,7 @@ TabView::ourStyleSheet()
            "QScrollBar::add-line:vertical {"
            "    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
            "    stop: 0  rgb(32, 47, 130), stop: 0.5 rgb(32, 47, 130),  stop:1 rgb(32, 47, 130));"
-           "    height: px;"
+           "    height: 0px;"
            "    subcontrol-position: bottom;"
            "    subcontrol-origin: margin;"
            "}"
@@ -204,7 +204,7 @@ TabView::ourStyleSheet()
            "QScrollBar:horizontal {"
            "    border: 0px solid darkGray; "
            "    background-color:%1;"
-           "    height: %4px;    "
+           "    height: %2px;    "
            "    margin: 1px 1px 1px 1px;"
            "}"
            "QScrollBar::handle:horizontal {"
@@ -231,9 +231,11 @@ TabView::ourStyleSheet()
            "QTableWidget::item:hover { color: black; background: lightGray; }"
            "QTreeView::item:hover { color: black; background: lightGray; }"
            "").arg(GColor(CPLOTBACKGROUND).name())
+           .arg(8 * dpiXFactor)
+#ifndef Q_OS_MAC
             .arg(GColor(CPLOTGRID).name())
             .arg(GCColor::alternateColor(GColor(CPLOTBACKGROUND)).name())
-            .arg(8 * dpiXFactor)
+#endif
             ;
 }
 

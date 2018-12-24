@@ -31,7 +31,8 @@ class RideAutoImportRule {
 public:
     static QList<QString> rules;
     enum ImportRule { noImport=0, importAll=1, importLast90days=2, importLast180days=3, importLast360days=4,
-                      importBackgroundAll=5, importBackground90=6, importBackground180=7, importBackground360=8 };
+                      importBackgroundAll=5, importBackground90=6, importBackground180=7, importBackground360=8,
+                      importLast14days=9, importBackground14=10, importLast30days=11, importBackground30=12};
 
     RideAutoImportRule();
 

@@ -39,6 +39,10 @@ RideAutoImportRule::RideAutoImportRule() {
     _ruleDescriptions.append(tr("Autoimport in background - past  90 days"));
     _ruleDescriptions.append(tr("Autoimport in background - past 180 days"));
     _ruleDescriptions.append(tr("Autoimport in background - past 360 days"));
+    _ruleDescriptions.append(tr("Autoimport with dialog - past  14 days"));
+    _ruleDescriptions.append(tr("Autoimport in background - past  14 days"));
+    _ruleDescriptions.append(tr("Autoimport with dialog - past 30 days"));
+    _ruleDescriptions.append(tr("Autoimport in background - past  30 days"));
 
 
 }

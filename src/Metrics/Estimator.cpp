@@ -184,7 +184,7 @@ Estimator::run()
     foreach(RideItem *item, rides) {
 
         // has power, but not running
-        if (item->present.contains("P") && !item->isRun) {
+        if (item->present.contains("P")) {
 
             // no date set
             if (from == QDate()) from = item->dateTime.date();
@@ -240,8 +240,8 @@ Estimator::run()
         // months is a rolling 3 months sets of bests
         QVector<float> wpk; // for getting the wpk values
 
-        // don't include RUNS ..................................................vvvvv
-        bests.addBests(RideFileCache::meanMaxPowerFor(context, wpk, begin, end, false));
+        // include RUNS ..................................................vvvvv
+        bests.addBests(RideFileCache::meanMaxPowerFor(context, wpk, begin, end, true));
         bestsWPK.addBests(wpk);
 
         // we now have the data

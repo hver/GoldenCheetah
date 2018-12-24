@@ -489,27 +489,27 @@ RideSummaryWindow::htmlSummary()
         << "elevation_gain";
 
     QStringList averageColumn = QStringList() // not const as modified below..
-        << "average_speed"
+//        << "average_speed"
         << "average_power"
         << "average_hr"
-        << "average_ct"
+ //       << "average_ct"
         << "average_cad"
         << "athlete_weight";
 
     QStringList maximumColumn = QStringList() // not const as modified below..
-        << "max_speed"
+  //      << "max_speed"
         << "max_power"
         << "max_heartrate"
-        << "max_ct"
+  //      << "max_ct"
         << "max_cadence"
         << "skiba_wprime_max";
 
     // show average and max temp if it is available (in ride summary mode)
-    if ((ridesummary && (ride->areDataPresent()->temp || ride->getTag("Temperature", "-") != "-")) ||
-       (!ridesummary && context->athlete->rideCache->getAggregate("average_temp", specification, true) != "-")) {
-        averageColumn << "average_temp";
-        maximumColumn << "max_temp";
-    }
+//    if ((ridesummary && (ride->areDataPresent()->temp || ride->getTag("Temperature", "-") != "-")) ||
+//       (!ridesummary && context->athlete->rideCache->getAggregate("average_temp", specification, true) != "-")) {
+//        averageColumn << "average_temp";
+//        maximumColumn << "max_temp";
+//    }
 
     // if o2 data is available show the average and max
     if ((ridesummary && ride->areDataPresent()->smo2) || 
