@@ -721,7 +721,7 @@ struct FitFileReaderState
 
             switch (field.num) {
                 case 7:   // METmax: 1 METmax = VO2max * 3.5, scale 65536
-                    rideFile->setTag("VO2max detected", QString::number(round(value / 65536.0 * 3.5 * 10) / 10));
+                    rideFile->setTag("VO2max detected", QString::number(round(value / 65536.0 * 3.5 * 10.0) / 10.0));
                     break;
 
                 case 4:   // Aerobic Training Effect, scale 10
@@ -753,8 +753,7 @@ struct FitFileReaderState
 
                 case 15:   // If watch detected Running Lactate Threshold Speed, m/s
                     if(rideFile->isRun() && value > 0){
-                        printf("Detected Running Lactate Threshold speed: %4.2f \n",value/100.0);
-                        rideFile->setTag("LTS detected", QString::number(value/100));
+                        rideFile->setTag("LTS detected", QString::number(value/100.0));
                     }
                     break;
 
