@@ -725,28 +725,23 @@ struct FitFileReaderState
                     break;
 
                 case 4:   // Aerobic Training Effect, scale 10
-                    printf("Aerobic Training Effect %4.1f \n",value/10.0);
                     rideFile->setTag("Aerobic Training Effect", QString::number(value/10.0));
                     break;
 
                 case 20:   // Anaerobic Training Effect, scale 10
-                    printf("Anaerobic Training Effect %4.1f \n",value/10.0);
                     rideFile->setTag("Anaerobic Training Effect", QString::number(value/10.0));
                     break;
 
                 case 9:   // Recovery Time, minutes
-                    printf("Recovery Time, hours %4.1f \n",value/60.0);
                     rideFile->setTag("Recovery Time", QString::number(round(value/60.0)));
                     break;
 
                 case 17:   // Performance Condition
-                    printf("Performance Condition: %lld \n",value);
                     rideFile->setTag("Performance Condition", QString::number(value));
                     break;
 
                 case 14:   // If watch detected Running Lactate Threshold Heart Rate, bpm
                     if(rideFile->isRun() && value > 0){
-                        printf("Detected Running Lactate Threshold Heart Rate: %lld \n",value);
                         rideFile->setTag("LTHR detected", QString::number(value));
                     }
                     break;
