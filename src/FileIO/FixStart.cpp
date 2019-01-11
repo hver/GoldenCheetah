@@ -129,9 +129,11 @@ FixStart::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString op=
 
     // OK, so there are probably some gaps, lets post process them
     RideFilePoint *last = NULL;
-    int deletedPoints = 0;
+    int deletedPoints = 0,secos;
     double minDeletedPower = 0.0, maxDeletedPower = 0.0, lastPointSeconds = -999.0;
     bool wrongPowerRange = false;
+
+    std::vector<int> deletedSecs;
 
     // put it all in a LUW
     ride->command->startLUW("Remove Bad Start Values");
@@ -139,11 +141,25 @@ FixStart::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString op=
     for (int position = 0; position < ride->dataPoints().count(); position++) {
         RideFilePoint *point = ride->dataPoints()[position];
 
+        secos = static_cast<int>(round(point->secs));
+
+        //XDataSeries* a = ride->xdata("DEVELOPER");
+        //XDataPoint* b = a->datapoints[position];
+        //b->secs;
         //if (NULL != last) {
+
+        if (point->watts == 0.0){
+            ride->command->deletePoint(position);
+            deletedSecs.push_back(secos);
+            printf("Deleted point at %d sec because of power 0 \n",secos);
+            deletedPoints++;
+            position--;
+            continue;
+        }
 
         // Pause detected
         if (point->secs > (lastPointSeconds + ride->recIntSecs())){
-            printf("Detected gap at %4.0f sec \n",point->secs);
+            printf("Detected gap at %d sec \n",secos);
             
             wrongPowerRange = point->watts < 120.0;
 
@@ -151,7 +167,7 @@ FixStart::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString op=
                 deletedPoints++;
 
                 ride->command->deletePoint(position);
-                ride->command->deleteXDataPoints("DEVELOPER",position,1);
+                deletedSecs.push_back(secos);
                 position--;
                 if (minDeletedPower > point->watts)  minDeletedPower = point->watts;
                 if (maxDeletedPower < point->watts)  maxDeletedPower = point->watts;
@@ -165,138 +181,18 @@ FixStart::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString op=
             lastPointSeconds = point->secs;
         }
 
-            
-/*            double gap = point->secs - last->secs - ride->recIntSecs();
-
-            // if we have gps and we moved, then this isn't a stop
-            bool stationary = ((last->lat || last->lon) && (point->lat || point->lon)) // gps is present
-                         && last->lat == point->lat && last->lon == point->lon;
-
-            // moved for less than stop seconds ... interpolate
-            if (!stationary && gap >= secondsToProcess && gap <= stop) {
-
-                // what's needed?
-                deletion++;
-                deletionTime += gap;
-
-                int count = gap/ride->recIntSecs();
-                double hrdelta = (point->hr - last->hr) / (double) count;
-                double pwrdelta = (point->watts - last->watts) / (double) count;
-                double kphdelta = (point->kph - last->kph) / (double) count;
-                double kmdelta = (point->km - last->km) / (double) count;
-                double caddelta = (point->cad - last->cad) / (double) count;
-                double altdelta = (point->alt - last->alt) / (double) count;
-                double nmdelta = (point->nm - last->nm) / (double) count;
-                double londelta = (point->lon - last->lon) / (double) count;
-                double latdelta = (point->lat - last->lat) / (double) count;
-                double hwdelta = (point->headwind - last->headwind) / (double) count;
-                double slopedelta = (point->slope - last->slope) / (double) count;
-                double temperaturedelta = (point->temp - last->temp) / (double) count;
-                double lrbalancedelta = (point->lrbalance - last->lrbalance) / (double) count;
-                double ltedelta = (point->lte - last->lte) / (double) count;
-                double rtedelta = (point->rte - last->rte) / (double) count;
-                double lpsdelta = (point->lps - last->lps) / (double) count;
-                double rpsdelta = (point->rps - last->rps) / (double) count;
-                double lpcodelta = (point->lpco - last->lpco) / (double) count;
-                double rpcodelta = (point->rpco - last->rpco) / (double) count;
-                double lppbdelta = (point->lppb - last->lppb) / (double) count;
-                double rppbdelta = (point->rppb - last->rppb) / (double) count;
-                double lppedelta = (point->lppe - last->lppe) / (double) count;
-                double rppedelta = (point->rppe - last->rppe) / (double) count;
-                double lpppbdelta = (point->lpppb - last->lpppb) / (double) count;
-                double rpppbdelta = (point->rpppb - last->rpppb) / (double) count;
-                double lpppedelta = (point->lpppe - last->lpppe) / (double) count;
-                double rpppedelta = (point->rpppe - last->rpppe) / (double) count;
-                double smo2delta = (point->smo2 - last->smo2) / (double) count;
-                double thbdelta = (point->thb - last->thb) / (double) count;
-                double rcontactdelta = (point->rcontact - last->rcontact) / (double) count;
-                double rcaddelta = (point->rcad - last->rcad) / (double) count;
-                double rvertdelta = (point->rvert - last->rvert) / (double) count;
-                double tcoredelta = (point->tcore - last->tcore) / (double) count;
-
-
-                // add the points
-                for(int i=0; i<count; i++) {
-                    RideFilePoint *add = new RideFilePoint(last->secs+((i+1)*ride->recIntSecs()),
-                                                           last->cad+((i+1)*caddelta),
-                                                           last->hr + ((i+1)*hrdelta),
-                                                           last->km + ((i+1)*kmdelta),
-                                                           last->kph + ((i+1)*kphdelta),
-                                                           last->nm + ((i+1)*nmdelta),
-                                                           last->watts + ((i+1)*pwrdelta),
-                                                           last->alt + ((i+1)*altdelta),
-                                                           last->lon + ((i+1)*londelta),
-                                                           last->lat + ((i+1)*latdelta),
-                                                           last->headwind + ((i+1)*hwdelta),
-                                                           last->slope + ((i+1)*slopedelta),
-                                                           last->temp + ((i+1)*temperaturedelta),
-                                                           last->lrbalance + ((i+1)*lrbalancedelta),
-                                                           last->lte + ((i+1)*ltedelta),
-                                                           last->rte + ((i+1)*rtedelta),
-                                                           last->lps + ((i+1)*lpsdelta),
-                                                           last->rps + ((i+1)*rpsdelta),
-                                                           last->lpco + ((i+1)*lpcodelta),
-                                                           last->rpco + ((i+1)*rpcodelta),
-                                                           last->lppb + ((i+1)*lppbdelta),
-                                                           last->rppb + ((i+1)*rppbdelta),
-                                                           last->lppe + ((i+1)*lppedelta),
-                                                           last->rppe + ((i+1)*rppedelta),
-                                                           last->lpppb + ((i+1)*lpppbdelta),
-                                                           last->rpppb + ((i+1)*rpppbdelta),
-                                                           last->lpppe + ((i+1)*lpppedelta),
-                                                           last->rpppe + ((i+1)*rpppedelta),
-                                                           last->smo2 + ((i+1)*smo2delta),
-                                                           last->thb + ((i+1)*thbdelta),
-                                                           last->rvert + ((i+1)*rvertdelta),
-                                                           last->rcad + ((i+1)*rcaddelta),
-                                                           last->rcontact + ((i+1)*rcontactdelta),
-                                                           last->tcore + ((i+1)*tcoredelta),
-                                                           last->interval);
-
-                    ride->command->insertPoint(position++, add);
-                }
-
-            // stationary or greater than 30 seconds... fill with zeroes
-            } else if (gap > stop) {
-
-                deletion++;
-                deletionTime += gap;
-
-                int count = gap/ride->recIntSecs();
-                double kmdelta = (point->km - last->km) / (double) count;
-
-                // add zero value points
-                for(int i=0; i<count; i++) {
-                    RideFilePoint *add = new RideFilePoint(last->secs+((i+1)*ride->recIntSecs()),
-                                                           0,
-                                                           0,
-                                                           last->km + ((i+1)*kmdelta),
-                                                           0,
-                                                           0,
-                                                           0,
-                                                           last->alt,
-                                                           0,
-                                                           0,
-                                                           0,
-                                                           0,
-                                                           0,
-                                                           0,
-                                                           0.0, 0.0, 0.0, 0.0, //pedal torque / smoothness
-                                                           0.0, 0.0, // pedal platform offset
-                                                           0.0, 0.0, 0.0, 0.0, //pedal power phase
-                                                           0.0, 0.0, 0.0, 0.0, //pedal peak power phase
-                                                           0.0, 0.0, // smO2 / thb
-                                                           0.0, 0.0, 0.0, // running dynamics
-                                                           0.0,
-                                                           last->interval);
-                    ride->command->insertPoint(position++, add);
-                    //ride->command->deletePoint(position);
-                    //ride->command->deletePoints()
-                }
-            }*/
-        //}
-        last = point;
     }
+
+     for (int position = 0; position < ride->xdata("DEVELOPER")->datapoints.count(); position++) {
+         XDataPoint *xPoint = ride->xdata("DEVELOPER")->datapoints[position];
+         int xsecos = static_cast<int>(round(xPoint->secs));
+         if( std::find(deletedSecs.begin(), deletedSecs.end(), xsecos) != deletedSecs.end() ){
+            printf("Deleted xPoint at %d because its in the list \n",xsecos);
+            ride->command->deleteXDataPoints("DEVELOPER",position,1);
+            position--;
+         }
+     }
+
 
     // end the Logical unit of work here
     ride->command->endLUW();
