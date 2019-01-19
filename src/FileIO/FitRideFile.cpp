@@ -1487,9 +1487,10 @@ struct FitFileReaderState
             if (lap_name == "") {
                 lap_name = QObject::tr("Lap %1").arg(interval);
             }
+            
             rideFile->addInterval(RideFileInterval::DEVICE,
                                   this_start_time - start_time,
-                                  time - start_time,
+                                  this_start_time + round(total_elapsed_time) - start_time - 1,
                                   lap_name);
         }
     }
