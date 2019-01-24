@@ -613,14 +613,14 @@ RideSummaryWindow::htmlSummary()
         // For single activity use base metric according to sport
         pmc = context->athlete->getPMCFor(
                                     rideItem->isSwim ? "swimscore" :
-                                    //rideItem->isRun ? "govss" :
+                                    rideItem->isRun ? "govss" :
                                     "coggan_tss");
     } else {
         // For data range use base metric for single sport if homogeneous
         // or combined if mixed
         pmc = context->athlete->getPMCFor(
                             nActivities == nRides ? "coggan_tss" :
-                            nActivities == nRuns ? "coggan_tss" :
+                            nActivities == nRuns ? "govss" :
                             nActivities == nSwims ? "swimscore" :
                             "triscore");
     }
