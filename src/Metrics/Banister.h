@@ -79,6 +79,10 @@ public:
     Banister(Context *context, QString symbol, double t1, double t2, double k1=0, double k2=0);
     double value(QDate date, int type);
 
+    // utility
+    QDate getPeakCP(QDate from, QDate to, int &CP);
+    double RMSE(QDate from, QDate to, int &n); // only look at it for a date range
+
     // model parameters - initial 'priors' to use
     QString symbol;         // load metric
     double k1, k2;          // nte/pte coefficients
@@ -110,6 +114,7 @@ public slots:
     void init();        // reset previous fits
     void invalidate();  // mark as stale
     void refresh();     // collect data from rides etc
+    void setDecay(double t1, double t2); // adjust the t1/t2 parameters
     void fit();         // perform fits along windows
 
 private:

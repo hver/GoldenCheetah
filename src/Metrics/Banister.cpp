@@ -57,8 +57,10 @@ const double typical_CP = 261,
              typical_WPrime = 15500,
              typical_Pmax = 1100;
 
-// minimum number of days that is gap in seasons
+// used to control breaking into windows, but the performance is good enough
+// that we don't need to, and more data stops the fit from going bad.
 const int typical_SeasonBreak = 42;
+const int typical_SeasonSize = 700; // a good couple of years needed
 
 // for debugging
 #ifndef BANISTER_DEBUG
@@ -106,7 +108,10 @@ Banister::Banister(Context *context, QString symbol, double t1, double t2, doubl
     // when they all change we are ready to invalidate and refresh
     // don't worry about upstream events, this is what we are dependant on
     connect(context, SIGNAL(estimatesRefreshed()), this, SLOT(invalidate()));
-    connect(context, SIGNAL(estimatesRefreshed()), this, SLOT(refresh()));
+
+    // if not passed set to a default
+    if (t1==0) t1=50;
+    if (t2==0) t2=11;
 
     // refresh
     refresh();
@@ -119,6 +124,9 @@ Banister::value(QDate date, int type)
     // check in range
     if (date > stop || date < start) return 0;
 
+    // triger refresh on read.
+    if (isstale) refresh();
+
     // offset, bouinds check just in case.
     long index=date.toJulianDay()-start.toJulianDay();
     if (index <0 || index>=data.length()) return 0;
@@ -130,6 +138,58 @@ Banister::value(QDate date, int type)
     default:
     case BANISTER_PERFORMANCE: return data[index].perf;
     }
+}
+
+double
+Banister::RMSE(QDate from, QDate to, int &count)
+{
+    // not sure it makes much sense to only look at
+    // a portion of the curve, but lets do as asked
+    long starti = from.toJulianDay() - start.toJulianDay();
+    long stopi = to.toJulianDay() - start.toJulianDay();
+
+    // check bounds
+    if ((stopi-starti)<= 0 || starti < 0 || starti > data.length() || stopi < 0 || stopi > data.length()) return 0;
+
+    double se=0;
+    count=0;
+    while(starti < stopi) {
+        if (data[starti].test > 0) {
+            se += pow(data[starti].perf - data[starti].test, 2);
+            count++;
+        }
+
+        starti++;
+    }
+
+    // RMSE
+    return count > 0 ? sqrt(se / count) : 0;
+}
+
+QDate
+Banister::getPeakCP(QDate from, QDate to, int &CP)
+{
+    // not sure it makes much sense to only look at
+    // a portion of the curve, but lets do as asked
+    long starti = from.toJulianDay() - start.toJulianDay();
+    long stopi = to.toJulianDay() - start.toJulianDay();
+
+    // check bounds
+    if ((stopi-starti)<= 0 || starti < 0 || starti > data.length() || stopi < 0 || stopi > data.length()) return QDate();
+
+    int max=0;
+    int index=-1;
+    while(starti < stopi) {
+        if ((data[starti].perf * typical_CP / 100) > max) {
+            max = (data[starti].perf * typical_CP / 100);
+            index = starti;
+        }
+        starti++;
+    }
+    CP = max;
+
+    // RMSE
+    return start.addDays(index);
 }
 
 void
@@ -147,8 +207,10 @@ Banister::init()
     // default values
     k1=0.2;
     k2=0.2;
-    t1=31;
-    t2=15;
+
+    // t1,t2 if set to zero?
+    if (t1<=0) t1=50;
+    if (t2<=0) t2=11;
 }
 
 void
@@ -172,9 +234,14 @@ Banister::refresh()
     QDate f, l;
     if (context->athlete->rideCache->rides().count()) {
 
-        // set date range - extend to a year after last ride
+        // always start on first ride
         f= context->athlete->rideCache->rides().first()->dateTime.date();
-        l= context->athlete->rideCache->rides().last()->dateTime.date().addYears(1);
+
+        // set date range - extend to a year after last ride
+        // or a year from today whichever is later
+        QDate lastride = context->athlete->rideCache->rides().last()->dateTime.date().addYears(1);
+        QDate yearaway = QDate::currentDate().addYears(1);
+        l = yearaway > lastride ? yearaway : lastride;
 
     } else
         return;
@@ -305,16 +372,24 @@ Banister::refresh()
         if (data[i].test >0) testoffset++;
 
         // found the end of a season
-        if (inwindow && data[i].score <= 0 && i-lastworkoutday > typical_SeasonBreak) {
+        if (inwindow && ((data[i].score <= 0 && i-lastworkoutday > typical_SeasonBreak) || (i-adding.startIndex) > typical_SeasonSize)) {
 
             // only useful if we have 2 or more tests to fit to
             if (adding.tests >= 2) {
                 adding.stopIndex=i;
-                adding.stopDate=start.addDays(i);
+                adding.stopDate=adding.startDate.addDays(adding.stopIndex-adding.startIndex);
                 windows<<adding;
             }
             inwindow=false;
         }
+    }
+
+    // did we end in a window?
+    if (inwindow) {
+        adding.stopIndex=data.length()-1;
+        adding.stopDate=start.addDays(adding.stopIndex-adding.startIndex);
+        windows<<adding;
+
     }
 
     foreach(banisterFit f, windows) {
@@ -326,16 +401,21 @@ Banister::refresh()
     }
 
     //
-    // EXPAND A FITTING WINDOW WHERE <5 TESTS
+    // EXPAND A FITTING WINDOW
     //
-    int i=0;
-    while(i < windows.length() && windows.count() > 1) {
+    for(int i=windows.count()-1; i>0 && windows.count() > 1; i--) {
 
         // combine and remove prior
-        if (windows[i].tests < 5 && i>0) {
+        if (windows[i].tests < 5 || windows[i].stopIndex-windows[i].startIndex < typical_SeasonSize) {
             windows[i].combine(windows[i-1]);
-            windows.removeAt(--i);
-        } else i++;
+            windows.removeAt(i-1);
+        }
+    }
+
+    // make them contiguous
+    for(int i=0; i<windows.count(); i++) {
+        if (i<(windows.count()-1)) windows[i].stopIndex = windows[i+1].stopIndex;
+        else  windows[i].stopIndex = data.length()-1;
     }
 
     foreach(banisterFit f, windows) {
@@ -358,16 +438,15 @@ banisterFit::f(double d, const double *parms)
 {
     if (k1 > parms[0] || k1 < parms[0] ||
         k2 > parms[1] || k2 < parms[1] ||
-        t1 > parms[2] || t1 < parms[2] ||
-        t2 > parms[3] || t2 < parms[3] ||
-        p0 > parms[4] || p0 < parms[4]) {
+        p0 > parms[2] || p0 < parms[2]) {
 
         // we'll keep the parameters passed
         k1 = parms[0];
         k2 = parms[1];
-        t1 = parms[2];
-        t2 = parms[3];
-        p0 = parms[4];
+        p0 = parms[2];
+        // we fixed t1/t2 (for now)
+        t1 = parent->t1;
+        t2 = parent->t2;
 
         //printd("fit iter %s to %s [k1=%g k2=%g t1=%g t2=%g p0=%g]\n", startDate.toString().toStdString().c_str(), stopDate.toString().toStdString().c_str(), k1,k2,t1,t2,p0); // too much info even in debug, unless you want it
         compute(startIndex, stopIndex);
@@ -390,14 +469,14 @@ banisterFit::compute(long start, long stop)
             parent->data[index].g =  parent->data[index].h = 0;
             first = false;
         } else {
-            parent->data[index].g = (parent->data[index-1].g * exp (-1/t1)) + parent->data[index].score;
-            parent->data[index].h = (parent->data[index-1].h * exp (-1/t2)) + parent->data[index].score;
+            parent->data[index].g = (parent->data[index-1].g * exp (-1/parent->t1)) + parent->data[index].score;
+            parent->data[index].h = (parent->data[index-1].h * exp (-1/parent->t2)) + parent->data[index].score;
         }
 
         // apply coefficients
         parent->data[index].pte = parent->data[index].g * k1;
         parent->data[index].nte = parent->data[index].h * k2;
-        parent->data[index].perf = p0 + parent->data[index].pte - parent->data[index].nte;
+        parent->data[index].perf = p0 + (parent->data[index].pte - parent->data[index].nte);
     }
 }
 
@@ -423,32 +502,44 @@ static double calllmfitf(double t, const double *p) {
 return static_cast<banisterFit*>(calllmfitmodel)->f(t, p);
 
 }
+
+void Banister::setDecay(double one, double two)
+{
+    // we will need to refit too...
+    t1 = one;
+    t2 = two;
+
+    // no need to refresh, just refit
+    fit();
+
+}
 void Banister::fit()
 {
     for(int i=0; i<windows.length(); i++) {
 
-        double prior[5]={ k1, k2, t1, t2, performanceScore[windows[i].testoffset] };
+        double prior[3]={ k1, k2, performanceScore[windows[i].testoffset] };
 
         lm_control_struct control = lm_control_double;
         control.patience = 1000; // more than this and there really is a problem
         lm_status_struct status;
 
-        printd("fitting window %d start=%s [k1=%g k2=%g t1=%g t2=%g p0=%g]\n", i, windows[i].startDate.toString().toStdString().c_str(), prior[0], prior[1], prior[2], prior[3], prior[4]);
+        printd("fitting window %d start=%s [k1=%g k2=%g p0=%g]\n", i, windows[i].startDate.toString().toStdString().c_str(), prior[0], prior[1], prior[2]);
 
         // use forwarder via global variable, so mutex around this !
         calllmfit.lock();
         calllmfitmodel=&windows[i];
 
-
         //fprintf(stderr, "Fitting ...\n" ); fflush(stderr);
-        lmcurve(5, prior, windows[i].tests, performanceDay.constData()+windows[i].testoffset, performanceScore.constData()+windows[i].testoffset,
+        lmcurve(3, prior, windows[i].tests, performanceDay.constData()+windows[i].testoffset, performanceScore.constData()+windows[i].testoffset,
                 calllmfitf, &control, &status);
 
         // release for others
         calllmfit.unlock();
 
         if (status.outcome >= 0) {
-            printd("window %d %s [k1=%g k2=%g t1=%g t2=%g p0=%g]\n", i, lm_infmsg[status.outcome], prior[0], prior[1], prior[2], prior[3], prior[4]);
+            int n=0;
+            double x=RMSE(windows[i].startDate, windows[i].stopDate, n);
+            printd("RMSE %g for %d points: window %d %s [k1=%g k2=%g p0=%g]\n", x, n, i, lm_infmsg[status.outcome], prior[0], prior[1], prior[2]);
         }
     }
 
