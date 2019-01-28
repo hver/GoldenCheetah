@@ -3354,7 +3354,8 @@ void write_session(QByteArray *array, const RideFile *ride, QHash<QString,RideMe
     write_int32(array, value, true);
 
     // 6. sport
-    // Export as bike, run or swim, default is bike. Proper way would be to support all sports based on tag "Sport"
+    // Export as bike, run or swim, default sport is bike. 
+    // todo: support all sports based on tag "Sport"
     int sport = ride->isRun() ? 1 : ride->isSwim() ? 5 : 2;
     write_int8(array, sport);
 
@@ -3626,7 +3627,7 @@ void write_record(QByteArray *array, const RideFile *ride, bool withAlt, bool wi
             write_int8(ridePoint, point->cad);
         }
         // In runs, cadence is saved in 'rcad' instead of 'cad'
-        if (withCad && ride->isRun() && ride->areDataPresent()->rcad){
+        else if (withCad && ride->isRun() && ride->areDataPresent()->rcad){
             write_int8(ridePoint, point->rcad);
         }
         if ( ride->areDataPresent()->km ) {
