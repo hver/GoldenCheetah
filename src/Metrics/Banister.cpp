@@ -53,9 +53,10 @@
 #include "lmcurve.h"
 
 // the mean athlete from opendata analysis
-const double typical_CP = 261,
-             typical_WPrime = 15500,
-             typical_Pmax = 1100;
+// changed for runners numbers
+const double typical_CP = 282,
+             typical_WPrime = 12000,
+             typical_Pmax = 650;
 
 // used to control breaking into windows, but the performance is good enough
 // that we don't need to, and more data stops the fit from going bad.
