@@ -135,7 +135,7 @@ struct FitFileReaderState
     int last_event;
     int last_msg_type;
     double frac_time; // to carry sub-second length time in pool swimming
-    double last_lap_end; // to align laps for drill mode in pool swimming
+    double last_altitude; // to avoid problems when records lacks altitude
     QVariant isGarminSmartRecording;
     QVariant GarminHWM;
     XDataSeries *weatherXdata;
@@ -152,7 +152,7 @@ struct FitFileReaderState
         last_time(0), last_distance(0.00f), interval(0), calibration(0),
         devices(0), stopped(true), isLapSwim(false), pool_length(0.0),
         last_event_type(-1), last_event(-1), last_msg_type(-1), frac_time(0.0),
-        last_lap_end(0.0)
+        last_altitude(0.0)
     {}
 
     struct TruncatedRead {};
@@ -602,11 +602,26 @@ struct FitFileReaderState
     QString getNameForExtraNative(int native_num) {
         switch (native_num) {
 
+            case 40: // STANCE_TIME_PERCENT
+                    return "STANCETIMEPERCENT"; // Stance Time Percent
+
+            case 42: // ACTIVITY_TYPE
+                    return "ACTIVITYTYPE"; // Activity Type
+
             case 47: // COMBINED_PEDAL_SMOOTHNES
                     return "COMBINEDSMOOTHNESS"; //Combined Pedal Smoothness
 
             case 81: // BATTERY_SOC
                     return "BATTERYSOC";
+
+            case 83: // VERTICAL_RATIO
+                    return "VERTICALRATIO"; // Vertical Ratio
+
+            case 85: // STEP_LENGTH
+                    return "STEPLENGTH"; // Step Length
+
+            case 90: // PERFORMANCE_CONDITION
+                    return "PERFORMANCECONDITION"; // Performance Contition
 
             default:
                     return QString("FIELD_%1").arg(native_num);
@@ -615,6 +630,13 @@ struct FitFileReaderState
 
     float getScaleForExtraNative(int native_num) {
         switch (native_num) {
+
+            case 40: // STANCE_TIME_PERCENT
+            case 83: // VERTICAL_RATIO
+                    return 100.0;
+
+            case 85: // STEP_LENGTH
+                    return 10.0;
 
             case 47: // COMBINED_PEDAL_SMOOTHNES
             case 81: // BATTERY_SOC
@@ -1506,7 +1528,7 @@ struct FitFileReaderState
         if (time_offset > -1)
             time = last_reference_time + time_offset; // was last_time + time_offset
 
-        double alt = 0, cad = 0, km = 0, hr = 0, lat = 0, lng = 0, badgps = 0, lrbalance = RideFile::NA;
+        double alt = last_altitude, cad = 0, km = 0, hr = 0, lat = 0, lng = 0, badgps = 0, lrbalance = RideFile::NA;
         double kph = 0, temperature = RideFile::NA, watts = 0, slope = 0, headwind = 0;
         double leftTorqueEff = 0, rightTorqueEff = 0, leftPedalSmooth = 0, rightPedalSmooth = 0;
 
@@ -1651,8 +1673,9 @@ struct FitFileReaderState
                                 rvert = value / 100.0f;
                              break;
 
-                    //case 40: // GROUND CONTACT TIME PERCENT
-                             //break;
+                    case 40: // GROUND CONTACT TIME PERCENT
+                             native_num = -1;
+                             break;
 
                     case 41: // GROUND CONTACT TIME
                              if (!native_profile && field.deve_idx>-1)
@@ -1661,10 +1684,9 @@ struct FitFileReaderState
                                 rcontact = value / 10.0f;
                              break;
 
-                    //case 42: // ACTIVITY_TYPE
-                    //         // TODO We should know/test value for run
-                    //         run = true;
-                    //         break;
+                    case 42: // ACTIVITY_TYPE
+                             native_num = -1;
+                             break;
 
                     case 43: // LEFT_TORQUE_EFFECTIVENESS
                              leftTorqueEff = value / 2.0;
@@ -1729,13 +1751,22 @@ struct FitFileReaderState
                              rightTopPeakPowerPhase = round(valueList.at(0) * 360.0/256);
                              rightBottomPeakPowerPhase = round(valueList.at(1) * 360.0/256);
                              break;
+                    case 83: // VERTICAL_RATIO
+                             native_num = -1;
+                             break;
                     case 84: // Left right balance
                              lrbalance = value/100.0;
+                             break;
+                    case 85: // STEP_LENGTH
+                             native_num = -1;
                              break;
 
                     case 87: // ???
                              break;
 
+                    case 90: // PERFORMANCE_CONDITION
+                             native_num = -1;
+                             break;
 
                     default:
                             unknown_record_fields.insert(native_num);
@@ -1976,6 +2007,7 @@ struct FitFileReaderState
 
         last_time = time;
         last_distance = km;
+        last_altitude = alt;
 
         if (p_deve != NULL) {
             p_deve->secs = secs;
