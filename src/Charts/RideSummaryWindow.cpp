@@ -476,17 +476,18 @@ RideSummaryWindow::htmlSummary()
         << "time_riding"
         << "total_distance"
         << "ride_count"
-        << "total_work"
-        << "skiba_wprime_exp"
+       // << "total_work"
+        // << "skiba_wprime_exp"
         << "elevation_gain";
 
     static const QStringList rtotalColumn = QStringList()
         << "workout_time"
+        << "time_riding"
         << "total_distance"
-        << "ride_count"
-        << "total_work"
-        << "skiba_wprime_exp"
-        << "elevation_gain";
+        << "ride_count";
+     //   << "total_work"
+     //   << "skiba_wprime_exp"
+     //   << "elevation_gain";
 
     QStringList averageColumn = QStringList() // not const as modified below..
 //        << "average_speed"
@@ -528,6 +529,8 @@ RideSummaryWindow::htmlSummary()
         if (ride->isSwim()) averageColumn << "pace_swim";
     } else {
         if (nRuns > 0) averageColumn << "pace";
+        if (nRuns > 0) averageColumn << "time_riding";
+        if (nRuns > 0) averageColumn << "total_distance";
         if (nSwims > 0) averageColumn << "pace_swim";
     }
 
