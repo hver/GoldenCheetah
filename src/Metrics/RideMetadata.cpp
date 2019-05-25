@@ -244,7 +244,7 @@ RideMetadata::configChanged(qint32)
     }
 
     palette.setColor(QPalette::WindowText, GCColor::invertColor(GColor(CPLOTBACKGROUND)));
-    palette.setColor(QPalette::Text, QColor(Qt::black));
+    palette.setColor(QPalette::Text, GCColor::invertColor(GColor(CPLOTBACKGROUND)));
     setPalette(palette);
     tabs->setPalette(palette);
 
