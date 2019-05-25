@@ -392,6 +392,12 @@ struct FitFileReaderState
                 case 2604: return "Garmin Fenix 5x";
                 case 2691: return "Garmin FR935";
                 case 2697: return "Garmin Fenix 5";
+                case 2886: case 2888: return "Garmin FR645";
+                case 2900: return "Garmin Fenix 5s +";
+                case 3110: return "Garmin Fenix 5 +";
+                case 3111: return "Garmin Fenix 5x +";
+                case 3112: return "Garmin Edge 520 +";
+                case 3113: return "Garmin FR945";
                 case 20119: return "Garmin Training Center";
                 case 65532: return "Android ANT+ Plugin";
                 case 65534: return "Garmin Connect Website";
@@ -520,6 +526,14 @@ struct FitFileReaderState
                   case 2: return "BSX Insight 2";
                   default: return QString("igpsport %1").arg(prod);
             }
+        } else if (manu == 258) {
+            // Lezyne
+            switch (prod) {
+                case -1: return "Lezyne";
+                case 6: return "Lezyne Micro-GPS";
+                case 11: return "Lezyne MegaXL";
+                default: return QString("Lezyne %1").arg(prod);
+            }
         } else if (manu == 260) {
             // Zwift
             return "Zwift";
@@ -623,6 +637,9 @@ struct FitFileReaderState
             case 90: // PERFORMANCE_CONDITION
                     return "PERFORMANCECONDITION"; // Performance Contition
 
+            case 108: // to confirm : RESPIRATIONRATE
+                return "RESPIRATIONRATE"; // Performance Contition
+
             default:
                     return QString("FIELD_%1").arg(native_num);
         }
@@ -641,6 +658,9 @@ struct FitFileReaderState
             case 47: // COMBINED_PEDAL_SMOOTHNES
             case 81: // BATTERY_SOC
                     return 2.0;
+
+            case 108: // RESPIRATIONRATE
+                return 100.0;
 
             default:
                     return 1.0;

@@ -473,6 +473,7 @@ RideSummaryWindow::htmlSummary()
     static const QStringList columnNames = QStringList() << tr("Totals") << tr("Averages") << tr("Maximums") << tr("Metrics");
     static const QStringList totalColumn = QStringList()
         << "workout_time"
+        << "time_recording"
         << "time_riding"
         << "total_distance"
         << "ride_count"
@@ -813,7 +814,9 @@ RideSummaryWindow::htmlSummary()
     }
 
     // get the PDEStimates for this athlete - may be empty
-    getPDEstimates();
+    // when all activities involved are runs, get running models
+    getPDEstimates((ridesummary && rideItem && rideItem->isRun) ||
+                   (!ridesummary && nActivities==nRuns));
 
     // MODEL 
     // lets get a table going
@@ -1523,7 +1526,7 @@ RideSummaryWindow::htmlSummary()
 }
 
 void
-RideSummaryWindow::getPDEstimates()
+RideSummaryWindow::getPDEstimates(bool run)
 {
     // none available yet?
     if (context->athlete->getPDEstimates().count() == 0)  return;
@@ -1541,6 +1544,9 @@ RideSummaryWindow::getPDEstimates()
 
         // loop through and get ...
         foreach(PDEstimate est, context->athlete->getPDEstimates()) {
+
+            // only estimates matching the requested sport
+            if (est.run != run) continue;
 
             // filter is set above
             if (est.wpk != wpk) continue;
@@ -1624,6 +1630,7 @@ RideSummaryWindow::htmlCompareSummary() const
     static const QStringList columnNames = QStringList() << tr("Totals") << tr("Averages") << tr("Maximums") << tr("Metrics*");
     static const QStringList totalColumn = QStringList()
         << "workout_time"
+        << "time_recording"
         << "time_riding"
         << "total_distance"
         << "ride_count"

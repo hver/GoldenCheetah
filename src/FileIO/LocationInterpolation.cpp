@@ -81,7 +81,7 @@ geolocation xyz::togeolocation() const
     double x = xyz::x();
     double y = xyz::y();
     double z = xyz::z();
-    double zp = abs(z);
+    double zp = std::abs(z);
     double w2 = x*x + y*y;
     double w = sqrt(w2);
     double r2 = w2 + z*z;
@@ -128,8 +128,12 @@ geolocation xyz::togeolocation() const
 
 xyz Slerper::Slerp(double frac)
 {
-    double scale = sin(frac * m_angle) / m_sin_angle;
-    return m_x0_norm.scale(sin((1 - frac) * m_angle) / m_sin_angle).add(m_x1_norm.scale(scale));
+    if (m_sin_angle != 0.0)
+    {
+        double scale = sin(frac * m_angle) / m_sin_angle;
+        return m_x0_norm.scale(sin((1 - frac) * m_angle) / m_sin_angle).add(m_x1_norm.scale(scale));
+    }
+    return m_x0_norm;
 }
 
 // Precompute invariant values needed to geoslerp
