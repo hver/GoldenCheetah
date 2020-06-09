@@ -101,7 +101,8 @@ class FixLapSwim : public DataProcessor {
         bool postProcess(RideFile *, DataProcessorConfig* config, QString op);
 
         // the config widget
-        DataProcessorConfig* processorConfig(QWidget *parent) {
+        DataProcessorConfig* processorConfig(QWidget *parent, const RideFile * ride = NULL) {
+            Q_UNUSED(ride);
             return new FixLapSwimConfig(parent);
         }
 
@@ -136,7 +137,7 @@ FixLapSwim::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString o
     XDataSeries *series = ride->xdata("SWIM");
     if (!series || series->datapoints.isEmpty()) return false;
 
-    int typeIdx = -1, durationIdx = -1, strokesIdx = -1;
+    int typeIdx = -1, durationIdx = -1, strokesIdx = -1, restIdx = -1;
     for (int a=0; a<series->valuename.count(); a++) {
         if (series->valuename.at(a) == "TYPE")
             typeIdx = a;
@@ -144,12 +145,19 @@ FixLapSwim::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString o
             durationIdx = a;
         else if (series->valuename.at(a) == "STROKES")
             strokesIdx = a;
+        else if (series->valuename.at(a) == "REST")
+            restIdx = a;
     }
     // Stroke Type or Duration are mandatory, Strokes only to compute cadence
     if (typeIdx == -1 || durationIdx == -1) return false;
 
     QVariant GarminHWM = appsettings->value(NULL, GC_GARMIN_HWMARK);
     if (GarminHWM.isNull() || GarminHWM.toInt() == 0) GarminHWM.setValue(25); // default to 25 seconds.
+
+    // Preserve HR data
+    QVector<double> hrdata(ride->dataPoints().count());
+    for (int i=0; i<ride->dataPoints().count(); i++)
+        hrdata[i] = ride->dataPoints()[i]->hr;
 
     // delete current lap markers
     ride->clearIntervals();
@@ -195,8 +203,9 @@ FixLapSwim::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString o
            kph = 3600.0 * length_distance / length_duration;
            if (length_distance == 0.0) interval++; // pauses mark laps
            for (int i = 0; i < length_duration; i++) {
+               double hr = hrdata.value(last_time + i, 0.0); // recover HR data
                newRows << RideFilePoint(
-                   last_time + i, cad, 0.0,
+                   last_time + i, cad, hr,
                    last_distance + (length_distance * i/length_duration),
                    kph, 0.0, 0.0, 0.0, 0.0, 0.0,
                    0.0, 0.0,
@@ -213,13 +222,38 @@ FixLapSwim::postProcess(RideFile *ride, DataProcessorConfig *config=0, QString o
             last_time += length_duration;
             last_distance += length_distance;
             if (length_distance == 0.0) interval++; // pauses mark laps
-        }
+       }
+       // Alternative way to mark pauses: Rest seconds after each length
+       if (restIdx>0 && p->number[restIdx]>0) {
+           QVector<struct RideFilePoint> newRows;
+           interval++; // pauses mark laps
+           for (int i=0; i<p->number[restIdx] && i<100*GarminHWM.toInt(); i++) {
+               double hr = hrdata.value(last_time + i, 0.0); // recover HR data
+               newRows << RideFilePoint(
+                   last_time + i, 0.0, hr,
+                   last_distance,
+                   0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0,
+                   RideFile::NA,RideFile::NA,
+                   0.0, 0.0,0.0, 0.0,
+                   0.0, 0.0,
+                   0.0, 0.0,0.0, 0.0,
+                   0.0, 0.0,0.0, 0.0,
+                   0.0, 0.0,
+                   0.0, 0.0, 0.0, 0.0,
+                   interval);
+           }
+           ride->command->appendPoints(newRows);
+           last_time += p->number[restIdx];
+           interval++; // pauses mark laps
+       }
 
     }
 
     // Update Rec. Interval, Pool Length, set data present and commit
     ride->setRecIntSecs(1.0);
     ride->setTag("Pool Length", QString("%1").arg(pl));
+    ride->setDataPresent(ride->km, true);
     ride->setDataPresent(ride->kph, true);
     ride->setDataPresent(ride->cad, strokesIdx>0);
     ride->command->endLUW();

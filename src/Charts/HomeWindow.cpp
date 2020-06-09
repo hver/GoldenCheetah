@@ -27,6 +27,7 @@
 #include "Settings.h"
 #include "GcUpgrade.h" // for VERSION_CONFIG_PREFIX url to -layout.xml
 #include "LTMSettings.h" // for special case of edit LTM settings
+#include "Overview.h" // for special case of Overview defaults
 #include "ChartBar.h"
 #include "Utils.h"
 
@@ -76,6 +77,7 @@ HomeWindow::HomeWindow(Context *context, QString name, QString /* windowtitle */
     setControls(cw);
 
     setProperty("isManager", true);
+    nomenu=true;
     setAcceptDrops(true);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -160,8 +162,9 @@ HomeWindow::HomeWindow(Context *context, QString name, QString /* windowtitle */
     connect(context, SIGNAL(configChanged(qint32)), this, SLOT(configChanged(qint32)));
     //connect(tabbed, SIGNAL(currentChanged(int)), this, SLOT(tabSelected(int)));
     //connect(tabbed, SIGNAL(tabCloseRequested(int)), this, SLOT(removeChart(int)));
-    //connect(tb, SIGNAL(tabMoved(int,int)), this, SLOT(tabMoved(int,int)));
+    connect(chartbar, SIGNAL(itemMoved(int,int)), this, SLOT(tabMoved(int,int)));
     connect(chartbar, SIGNAL(currentIndexChanged(int)), this, SLOT(tabSelected(int)));
+    connect(chartbar, SIGNAL(contextMenu(int,int)), this, SLOT(tabMenu(int,int)));
     connect(titleEdit, SIGNAL(textChanged(const QString&)), SLOT(titleChanged()));
 
     // trends view we should select a library chart when a chart is selected.
@@ -188,9 +191,11 @@ HomeWindow::rightClick(const QPoint & /*pos*/)
 void
 HomeWindow::addChartFromMenu(QAction*action)
 {
+    // & removed to avoid issues with kde AutoCheckAccelerators
+    QString actionText = QString(action->text()).replace("&", "");
     GcWinID id = GcWindowTypes::None;
     for (int i=0; GcWindows[i].relevance; i++) {
-        if (GcWindows[i].name == action->text()) {
+        if (GcWindows[i].name == actionText) {
             id = GcWindows[i].id;
             break;
         }
@@ -353,6 +358,14 @@ HomeWindow::rideSelected()
 }
 
 void
+HomeWindow::tabMenu(int index, int x)
+{
+    // activate this tab's menu
+    QPoint pos = QPoint(x, mapToGlobal(chartbar->geometry().bottomLeft()).y()+(2*dpiXFactor));
+    charts[index]->menu->exec(pos);
+}
+
+void
 HomeWindow::dateRangeChanged(DateRange dr)
 { Q_UNUSED( dr )
     if (isVisible()) {
@@ -426,18 +439,24 @@ HomeWindow::tabSelected(int index, bool forride)
 void
 HomeWindow::tabMoved(int to, int from)
 {
-    // re-order the tabs
-    GcChartWindow *orig = charts[to];
-    charts[to] = charts[from];
-    charts[from] = orig;
+     GcChartWindow *me = charts.takeAt(from);
+     charts.insert(to, me);
 
-    // re-order the controls
+    // re-order the controls - to reflect new indexes
     controlStack->blockSignals(true);
     QWidget *w = controlStack->widget(from);
     controlStack->removeWidget(w);
     controlStack->insertWidget(to, w);
     controlStack->setCurrentIndex(to);
     controlStack->blockSignals(false);
+
+    // re-order the stack - to reflect new indexes
+    tabbed->blockSignals(true);
+    w = tabbed->widget(from);
+    tabbed->removeWidget(w);
+    tabbed->insertWidget(to, w);
+    tabbed->setCurrentIndex(to);
+    tabbed->blockSignals(false);
 }
 
 void
@@ -484,6 +503,8 @@ HomeWindow::styleChanged(int id)
             chartbar->addWidget(charts[i]->property("title").toString());
             charts[i]->setResizable(false); // we need to show on tab selection!
             charts[i]->setProperty("dateRange", property("dateRange"));
+            charts[i]->showMore(false);
+            charts[i]->menuButton->hide(); // we use tab button
             charts[i]->hide(); // we need to show on tab selection!
             // weird bug- set margins *after* tabbed->addwidget since it resets margins (!!)
             if(charts[i]->showTitle() == true) charts[i]->setContentsMargins(0,25*dpiYFactor,0,0);
@@ -494,6 +515,7 @@ HomeWindow::styleChanged(int id)
             charts[i]->setContentsMargins(0,25*dpiYFactor,0,0);
             charts[i]->setResizable(false); // we need to show on tab selection!
             charts[i]->show();
+            charts[i]->showMore(true);
             charts[i]->setProperty("dateRange", property("dateRange"));
             charts[i]->setProperty("ride", property("ride"));
             break;
@@ -502,6 +524,7 @@ HomeWindow::styleChanged(int id)
             charts[i]->setContentsMargins(0,15*dpiYFactor,0,0);
             charts[i]->setResizable(true); // we need to show on tab selection!
             charts[i]->show();
+            charts[i]->showMore(true);
             charts[i]->setProperty("dateRange", property("dateRange"));
             charts[i]->setProperty("ride", property("ride"));
         default:
@@ -635,6 +658,7 @@ HomeWindow::addChart(GcChartWindow* newone)
 
         case 0 :
             newone->setResizable(false); // we need to show on tab selection!
+            newone->showMore(false);
             //tabbed->addTab(newone, newone->property("title").toString());
             tabbed->addWidget(newone);
             chartbar->addWidget(newone->property("title").toString());
@@ -650,6 +674,7 @@ HomeWindow::addChart(GcChartWindow* newone)
             newone->setFixedWidth((tileArea->width()-50));
             newone->setFixedHeight(newone->width() * 0.7);
             newone->setResizable(false); // we need to show on tab selection!
+            newone->showMore(true);
             int row = chartnum; // / 2;
             int column = 0; //chartnum % 2;
             newone->setContentsMargins(0,25*dpiYFactor,0,0);
@@ -682,6 +707,7 @@ HomeWindow::addChart(GcChartWindow* newone)
                 newone->setFixedHeight(newheight);
                 newone->setContentsMargins(0,15*dpiYFactor,0,0);
                 newone->setResizable(true); // we need to show on tab selection!
+                newone->showMore(true);
 
                 if (currentStyle == 2 && chartCursor >= 0) winFlow->insert(chartCursor, newone);
                 else winFlow->addWidget(newone);
@@ -1177,6 +1203,11 @@ GcWindowDialog::GcWindowDialog(GcWinID type, Context *context, GcChartWindow **h
         static_cast<LTMWindow*>(win)->applySettings(*use);
         win->setProperty("title", use->name);
         title->setText(use->name);
+    }
+
+    // special case
+    if (type == GcWindowTypes::Overview) {
+        static_cast<OverviewWindow*>(win)->setConfiguration("");
     }
 
     RideItem *notconst = (RideItem*)context->currentRideItem();
@@ -1675,9 +1706,7 @@ ImportChartDialog::ImportChartDialog(Context *context, QList<QMap<QString,QStrin
     table->setShowGrid(false);
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->horizontalHeader()->setStretchLastSection(true);
-#if QT_VERSION > 0x050200
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-#endif
 
     // Populate the list of named searches
     for(int i=0; i<list.count(); i++) {

@@ -62,7 +62,7 @@ AnalysisSidebar::AnalysisSidebar(Context *context) : QWidget(context->mainWindow
 
     // Activity History
     rideNavigator = new RideNavigator(context, true);
-    rideNavigator->setProperty("nomenu", true);
+    rideNavigator->showMore(false);
     groupByMapper = NULL;
 
     // retrieve settings (properties are saved when we close the window)
@@ -261,9 +261,7 @@ AnalysisSidebar::setRide(RideItem*ride)
             add->setData(0, Qt::UserRole+1, QVariant(interval->color));
             add->setData(0, Qt::UserRole+2, QVariant(interval->test));
             add->setFlags(Qt::ItemIsEnabled
-#if QT_VERSION >= 0x50101
                           | Qt::ItemNeverHasChildren
-#endif
                           | Qt::ItemIsSelectable 
                           | Qt::ItemIsDragEnabled 
                           | Qt::ItemIsEditable);

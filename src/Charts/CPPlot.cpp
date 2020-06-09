@@ -1168,10 +1168,10 @@ CPPlot::plotPowerProfile()
         if (percentile > 95 || percentile < 5) color = GColor(CPLOTGRID);
         else if (percentile < 51 && percentile > 49) {
             color = GColor(CPLOTGRID);
-            color.setRed(color.red() + 30);
+            color.setRed(150);
         } else {
             color = GColor(CPLOTGRID);
-            color.setBlue(color.blue() + 50);
+            color.setBlue(150);
         }
 
         QPen gridpen(color);
@@ -2141,6 +2141,11 @@ CPPlot::pointHover(QwtPlotCurve *curve, int index)
             units2 = tr("%1 %2").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries))
                                 .arg(tr("J")); // Joule
 
+        } else if (criticalSeries == CriticalPowerWindow::work) {
+
+            units2 = tr("%1 %2").arg(yvalue, 0, 'f', 1)
+                                .arg(tr("kJ")); // kJoule
+
         } else if (criticalSeries == CriticalPowerWindow::kph) {
 
             if (metricPace)  units2 = tr("%1 kph").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries));
@@ -2149,7 +2154,7 @@ CPPlot::pointHover(QwtPlotCurve *curve, int index)
         } else {
 
             // eg: "### watts"
-            if (showPercent) units2 = tr("%1 Percent").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries));
+            if (showPercent && curve == rideCurve) units2 = tr("%1 Percent").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries));
             else if (showPowerIndex) units2 = tr("%1 Power Index").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries));
             else units2 = tr("%1 %2").arg(yvalue, 0, 'f', RideFile::decimalsFor(rideSeries))
                                 .arg(RideFile::unitName(rideSeries, context));

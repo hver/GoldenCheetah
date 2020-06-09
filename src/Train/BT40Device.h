@@ -23,6 +23,11 @@
 #include <QLowEnergyController>
 #include <QLowEnergyService>
 
+typedef struct btle_sensor_type {
+    const char *descriptive_name;
+    const char *iconname;
+} btle_sensor_type_t;
+
 class BT40Device: public QObject
 {
     Q_OBJECT
@@ -32,6 +37,10 @@ public:
     ~BT40Device();
     void connectDevice();
     void disconnectDevice();
+    static QMap<QBluetoothUuid, btle_sensor_type_t> supportedServices;
+    QBluetoothDeviceInfo deviceInfo() const;
+
+    void setGradient(double Gradient);
 
 private slots:
     void deviceConnected();
@@ -46,17 +55,24 @@ private slots:
 				  const QByteArray &value);
     void serviceError(QLowEnergyService::ServiceError e);
 
+signals:
+    void setNotification(QString msg, int timeout);
 private:
     QObject *parent;
     QBluetoothDeviceInfo m_currentDevice;
     QLowEnergyController *m_control;
-    static QList<QBluetoothUuid> supportedServiceUuids;
     QList<QLowEnergyService*> m_services;
     int prevCrankStaleness;
     quint16 prevCrankTime;
     quint16 prevCrankRevs;
+    bool prevWheelStaleness;
     quint16 prevWheelTime;
     quint32 prevWheelRevs;
+
+    // Tacx ANT over UART specific service
+    QLowEnergyCharacteristic m_charTacxUART;
+    QLowEnergyService* m_servTacxUART = nullptr;
+
     bool connected;
     void getCadence(QDataStream& ds);
     void getWheelRpm(QDataStream& ds);

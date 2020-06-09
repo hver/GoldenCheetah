@@ -45,7 +45,7 @@
 RideItem::RideItem() 
     : 
     ride_(NULL), fileCache_(NULL), context(NULL), isdirty(false), isstale(true), isedit(false), skipsave(false), path(""), fileName(""),
-    color(QColor(1,1,1)), isRun(false), isSwim(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0), metacrc(0), crc(0), timestamp(0), dbversion(0), udbversion(0), weight(0) {
+    color(QColor(1,1,1)), sport(""), isBike(false), isRun(false), isSwim(false), isXtrain(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0), metacrc(0), crc(0), timestamp(0), dbversion(0), udbversion(0), weight(0) {
     metrics_.fill(0, RideMetricFactory::instance().metricCount());
     count_.fill(0, RideMetricFactory::instance().metricCount());
 }
@@ -53,7 +53,7 @@ RideItem::RideItem()
 RideItem::RideItem(RideFile *ride, Context *context) 
     : 
     ride_(ride), fileCache_(NULL), context(context), isdirty(false), isstale(true), isedit(false), skipsave(false), path(""), fileName(""),
-    color(QColor(1,1,1)), isRun(false), isSwim(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0), metacrc(0), crc(0), timestamp(0), dbversion(0), udbversion(0), weight(0) 
+    color(QColor(1,1,1)), sport(""), isBike(false), isRun(false), isSwim(false), isXtrain(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0), metacrc(0), crc(0), timestamp(0), dbversion(0), udbversion(0), weight(0)
 {
     metrics_.fill(0, RideMetricFactory::instance().metricCount());
     count_.fill(0, RideMetricFactory::instance().metricCount());
@@ -62,7 +62,7 @@ RideItem::RideItem(RideFile *ride, Context *context)
 RideItem::RideItem(QString path, QString fileName, QDateTime &dateTime, Context *context, bool planned)
     :
     ride_(NULL), fileCache_(NULL), context(context), isdirty(false), isstale(true), isedit(false), skipsave(false), path(path), fileName(fileName),
-    dateTime(dateTime), color(QColor(1,1,1)), planned(planned), isRun(false), isSwim(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0),
+    dateTime(dateTime), color(QColor(1,1,1)), planned(planned), sport(""), isBike(false), isRun(false), isSwim(false), isXtrain(false), samples(false), zoneRange(-1), hrZoneRange(-1), paceZoneRange(-1), fingerprint(0),
     metacrc(0), crc(0), timestamp(0), dbversion(0), udbversion(0), weight(0) 
 {
     metrics_.fill(0, RideMetricFactory::instance().metricCount());
@@ -121,8 +121,11 @@ RideItem::setFrom(RideItem&here, bool temp) // used when loading cache/rideDB.js
     udbversion = here.udbversion;
     color = here.color;
     present = here.present;
+    sport = here.sport;
+    isBike = here.isBike;
     isRun = here.isRun;
     isSwim = here.isSwim;
+    isXtrain = here.isXtrain;
     weight = here.weight;
     overrides_ = here.overrides_;
     samples = here.samples;
@@ -584,8 +587,11 @@ RideItem::refresh()
         getWeight();
 
         // first class stuff
+        sport = f->sport();
+        isBike = f->isBike();
         isRun = f->isRun();
         isSwim = f->isSwim();
+        isXtrain = f->isXtrain();
         color = context->athlete->colorEngine->colorFor(f->getTag(context->athlete->rideMetadata()->getColorField(), ""));
         present = f->getTag("Data", "");
         samples = f->dataPoints().count() > 0;
@@ -599,6 +605,9 @@ RideItem::refresh()
 
         if (context->athlete->paceZones(isSwim)) paceZoneRange = context->athlete->paceZones(isSwim)->whichRange(dateTime.date());
         else paceZoneRange = -1;
+
+        // RideFile cache refresh before metrics, as meanmax may be used in user formulas
+        RideFileCache updater(context, context->athlete->home->activities().canonicalPath() + "/" + fileName, getWeight(), ride_, true);
 
         // refresh metrics etc
         const RideMetricFactory &factory = RideMetricFactory::instance();
@@ -648,9 +657,6 @@ RideItem::refresh()
         dbversion = DBSchemaVersion;
         udbversion = UserMetricSchemaVersion;
         timestamp = QDateTime::currentDateTime().toTime_t();
-
-        // RideFile cache needs refreshing possibly
-        RideFileCache updater(context, context->athlete->home->activities().canonicalPath() + "/" + fileName, getWeight(), ride_, true);
 
         // we now match
         metacrc = metaCRC();
@@ -896,7 +902,7 @@ RideItem::updateIntervals()
                                                 RideFileInterval::ALL);
 
         // same as the whole ride, not need to compute
-        entire->metrics() = metrics();
+        entire->refresh();
         entire->rideInterval = NULL;
         intervals_ << entire;
     }

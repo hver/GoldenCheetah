@@ -31,6 +31,7 @@
 #include "DragBar.h"
 #ifdef GC_HAS_CLOUD_DB
 #include "CloudDBChart.h"
+#include "CloudDBUserMetric.h"
 #include "CloudDBVersion.h"
 #include "CloudDBTelemetry.h"
 #endif
@@ -40,7 +41,7 @@
 #include <AvailabilityMacros.h>
 #endif
 
-#if defined(NOWEBKIT) && defined(WIN32)
+#if defined(WIN32)
 // Macro to avoid Code Duplication in multiple files
 // QtWebEngine puts it's cache into the User directory (only on Windows) - so do not show in list
 # define SKIP_QTWE_CACHE \
@@ -55,12 +56,12 @@
 
 class QTFullScreen;
 class GcToolBar;
-class GcScopeBar;
 class Library;
 class QtSegmentControl;
 class SaveSingleDialogWidget;
 class ChooseCyclistDialog;
 class SearchFilterBox;
+class NewSideBar;
 
 
 class MainWindow;
@@ -127,10 +128,6 @@ class MainWindow : public QMainWindow
         // chart importing
         void importCharts(QStringList);
 
-        // search box gets and loses focus - make big/small
-        void searchFocusIn();
-        void searchFocusOut();
-
         // open and closing windows and tabs
         void closeAll();    // close all windows and tabs
 
@@ -147,6 +144,10 @@ class MainWindow : public QMainWindow
                                // changes mind if there are unsaved changes.
         void removeTab(Tab*);  // remove without question
         void switchTab(int index); // for switching between one tab and another
+
+        // sidebar selecting views and actions
+        void sidebarClicked(int id);
+        void sidebarSelected(int id);
 
         // Athlete Backup
         void setBackupAthleteMenu();
@@ -166,11 +167,13 @@ class MainWindow : public QMainWindow
         void setSubChartMenu();
         void setChartMenu(QMenu *);
         void addChart(QAction*);
+        void importChart();
 
         // menus to reflect cloud
         void setUploadMenu();
         void setSyncMenu();
         void checkCloud();
+        void importCloud(); // used to setup and sync in one on first run (see BlankState.cpp)
 
         void showOptions();
 
@@ -194,9 +197,7 @@ class MainWindow : public QMainWindow
         // Training View
         void addDevice();
         void downloadErgDB();
-#if QT_VERSION > 0x050000
         void downloadTodaysPlanWorkouts();
-#endif
         void manageLibrary();
         void showWorkoutWizard();
         void importWorkout();
@@ -234,10 +235,20 @@ class MainWindow : public QMainWindow
         // autoload rides from athlete specific directory (preferences)
         void ridesAutoImport();
 
+#ifdef GC_WANT_PYTHON
+        // Python fix scripts
+        void onEditMenuAboutToShow();
+        void buildPyFixesMenu();
+        void showManageFixPyScriptsDlg();
+        void showCreateFixPyScriptDlg();
+#endif
+
 #ifdef GC_HAS_CLOUD_DB
         // CloudDB actions
         void cloudDBuserEditChart();
         void cloudDBcuratorEditChart();
+        void cloudDBuserEditUserMetric();
+        void cloudDBcuratorEditUserMetric();
         void cloudDBshowStatus();
         void addChartFromCloudDB();
         void exportChartToCloudDB();
@@ -250,19 +261,18 @@ class MainWindow : public QMainWindow
 
     private:
 
-        GcScopeBar *scopebar;
+        NewSideBar *sidebar;
         Tab *currentTab;
         QList<Tab*> tabList;
 
 #ifndef Q_OS_MAC
         QTFullScreen *fullScreen;
 #endif
-        QPropertyAnimation *anim;
 
         SearchFilterBox *searchBox;
 
         // Not on Mac so use other types
-        QPushButton *sidebar, *lowbar;
+        QPushButton *sidelist, *lowbar;
         QtSegmentControl *styleSelector;
         GcToolBar *head;
 
@@ -301,6 +311,9 @@ class MainWindow : public QMainWindow
         // Miscellany
         QSignalMapper *toolMapper;
 
+#ifdef GC_WANT_PYTHON
+        QMenu *pyFixesMenu;
+#endif
 
 #ifdef GC_HAS_CLOUD_DB
         CloudDBVersionClient *versionClient;

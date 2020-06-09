@@ -42,12 +42,11 @@
 // Three current realtime device types supported are:
 #include "RealtimeController.h"
 #include "ComputrainerController.h"
-#if QT_VERSION >= 0x050000
 #include "MonarkController.h"
 #include "KettlerController.h"
 #include "KettlerRacerController.h"
+#include "ErgofitController.h"
 #include "DaumController.h"
-#endif
 #include "ANTlocalController.h"
 #include "NullController.h"
 #ifdef QT_BLUETOOTH_LIB
@@ -59,17 +58,16 @@
 #endif
 
 // Media selection helper
-#ifndef Q_OS_MAC
+#if defined(GC_VIDEO_AV) || defined(GC_VIDEO_QUICKTIME)
+#include "QtMacVideoWindow.h"
+#else
 #include "VideoWindow.h"
 #endif
-
 #ifdef Q_OS_MAC
-#include "QtMacVideoWindow.h"
 #include <CoreServices/CoreServices.h>
 #include <QStyle>
 #include <QStyleFactory>
 #import <IOKit/pwr_mgt/IOPMLib.h>
-
 #endif
 
 #ifdef WIN32
@@ -78,15 +76,16 @@
 
 #include "TrainDB.h"
 #include "Library.h"
-#include "PhysicsUtility.h"
 
-TrainSidebar::TrainSidebar(Context *context) : GcWindow(context), context(context)
+TrainSidebar::TrainSidebar(Context *context) : GcWindow(context), context(context),
+    bicycle(context)
 {
     QWidget *c = new QWidget;
     //c->setContentsMargins(0,0,0,0); // bit of space is useful
     QVBoxLayout *cl = new QVBoxLayout(c);
     setControls(c);
     autoConnect = false;
+    useSimulatedSpeed = false;
 
     cl->setSpacing(0);
     cl->setContentsMargins(0,0,0,0);
@@ -335,7 +334,8 @@ TrainSidebar::TrainSidebar(Context *context) : GcWindow(context), context(contex
     lap_time = QTime();
     lap_elapsed_msec = 0;
 
-    rrFile = recordFile = NULL;
+    rrFile = recordFile = vo2File = NULL;
+    lastRecordSecs = 0;
     status = 0;
     setStatusFlags(RT_MODE_ERGO);         // ergo mode by default
     mode = ERG;
@@ -600,6 +600,8 @@ TrainSidebar::configChanged(qint32)
     // lap sounds are off by default
     lapAudioEnabled = appsettings->value(this, TRAIN_LAPALERT, false).toBool();
 
+    useSimulatedSpeed = appsettings->value(this, TRAIN_USESIMULATEDSPEED, false).toBool();
+
     setProperty("color", GColor(CTRAINPLOTBACKGROUND));
 #if !defined GC_VIDEO_NONE
     mediaTree->setStyleSheet(GCColor::stylesheet());
@@ -641,16 +643,16 @@ TrainSidebar::configChanged(qint32)
         // to interact with the device
         if (Devices.at(i).type == DEV_CT) {
             Devices[i].controller = new ComputrainerController(this, &Devices[i]);
-#if QT_VERSION >= 0x050000
         } else if (Devices.at(i).type == DEV_MONARK) {
             Devices[i].controller = new MonarkController(this, &Devices[i]);
         } else if (Devices.at(i).type == DEV_KETTLER) {
             Devices[i].controller = new KettlerController(this, &Devices[i]);
         } else if (Devices.at(i).type == DEV_KETTLER_RACER) {
             Devices[i].controller = new KettlerRacerController(this, &Devices[i]);
+        } else if (Devices.at(i).type == DEV_ERGOFIT) {
+            Devices[i].controller = new ErgofitController(this, &Devices[i]);
         } else if (Devices.at(i).type == DEV_DAUM) {
             Devices[i].controller = new DaumController(this, &Devices[i]);
-#endif
 #ifdef GC_HAVE_LIBUSB
         } else if (Devices.at(i).type == DEV_FORTIUS) {
             Devices[i].controller = new FortiusController(this, &Devices[i]);
@@ -668,6 +670,8 @@ TrainSidebar::configChanged(qint32)
 #ifdef QT_BLUETOOTH_LIB
         } else if (Devices.at(i).type == DEV_BT40) {
             Devices[i].controller = new BT40Controller(this, &Devices[i]);
+            connect(Devices[i].controller, SIGNAL(vo2Data(double,double,double,double,double,double)),
+                    this, SLOT(vo2Data(double,double,double,double,double,double)));
 #endif
         }
     }
@@ -1117,6 +1121,10 @@ void TrainSidebar::Start()       // when start button is pressed
         session_time.start();
         lap_time.start();
         clearStatusFlags(RT_PAUSED);
+
+        // Reset speed simulation timer.
+        bicycle.reset();
+
         //foreach(int dev, activeDevices) Devices[dev].controller->restart();
         //gui_timer->start(REFRESHRATE);
         if (status & RT_RECORDING) disk_timer->start(SAMPLERATE);
@@ -1186,6 +1194,9 @@ void TrainSidebar::Start()       // when start button is pressed
         load = 100;
         slope = 0.0;
 
+        // Reset Speed Simulation
+        bicycle.clear();
+
         if (mode == ERG || mode == MRC) {
             setStatusFlags(RT_MODE_ERGO);
             clearStatusFlags(RT_MODE_SPIN);
@@ -1247,6 +1258,7 @@ void TrainSidebar::Start()       // when start button is pressed
 
             if (recordFile) delete recordFile;
             recordFile = new QFile(fulltarget);
+            lastRecordSecs = 0;
             if (!recordFile->open(QFile::WriteOnly | QFile::Truncate)) {
                 clearStatusFlags(RT_RECORDING);
             } else {
@@ -1369,6 +1381,14 @@ void TrainSidebar::Stop(int deviceStatus)        // when stop button is pressed
             rrFile=NULL;
         }
 
+        // close vo2File
+        if (vo2File) {
+            fprintf(stderr, "Closing vo2 file\n"); fflush(stderr);
+            vo2File->close();
+            delete vo2File;
+            vo2File=NULL;
+        }
+
         if(deviceStatus == DEVICE_ERROR)
         {
             recordFile->remove();
@@ -1427,6 +1447,7 @@ void TrainSidebar::Stop(int deviceStatus)        // when stop button is pressed
     displayWorkoutDistance = displayDistance = 0;
     displayLapDistance = 0;
     displayLapDistanceRemaining = -1;
+    displayAltitude = 0;
     guiUpdate();
 
     emit setNotification(tr("Stopped.."), 2);
@@ -1498,6 +1519,7 @@ void TrainSidebar::Connect()
     foreach(int dev, activeDevices) {
         Devices[dev].controller->start();
         Devices[dev].controller->resetCalibrationState();
+        connect(Devices[dev].controller, &RealtimeController::setNotification, this, &TrainSidebar::setNotification);
     }
     setStatusFlags(RT_CONNECTED);
     gui_timer->start(REFRESHRATE);
@@ -1515,7 +1537,10 @@ void TrainSidebar::Disconnect()
 
     qDebug() << "disconnecting..";
 
-    foreach(int dev, activeDevices) Devices[dev].controller->stop();
+    foreach(int dev, activeDevices) {
+        disconnect(Devices[dev].controller, &RealtimeController::setNotification, this, &TrainSidebar::setNotification);
+        Devices[dev].controller->stop();
+    }
     clearStatusFlags(RT_CONNECTED);
 
     gui_timer->stop();
@@ -1532,8 +1557,6 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
     RealtimeData rtData;
     rtData.setLap(displayLap + displayWorkoutLap); // user laps + predefined workout lap
     rtData.mode = mode;
-
-
 
     // get latest telemetry from devices
     if ((status&RT_RUNNING) || (status&RT_CONNECTED)) {
@@ -1605,6 +1628,9 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
             rtData.setSlope(slope); // always set load..
             rtData.setAltitude(displayAltitude); // always set display altitude
 
+            double distanceTick = 0;
+            bool fReceivedKphTelemetry = false;
+
             // fetch the right data from each device...
             foreach(int dev, activeDevices) {
 
@@ -1629,14 +1655,25 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                     rtData.setHb(local.getSmO2(), local.gettHb()); //only moxy data from ant and robot devices right now
                 }
 
+                if (Devices[dev].type == DEV_NULL || Devices[dev].type == DEV_BT40) {
+                    // Only robot and BT40 devices provides VO2 metrics
+                    rtData.setRf(local.getRf());
+                    rtData.setRMV(local.getRMV());
+                    rtData.setVO2_VCO2(local.getVO2(), local.getVCO2());
+                    rtData.setTv(local.getTv());
+                    rtData.setFeO2(local.getFeO2());
+                }
+
                 // what are we getting from this one?
                 if (dev == bpmTelemetry) rtData.setHr(local.getHr());
                 if (dev == rpmTelemetry) rtData.setCadence(local.getCadence());
                 if (dev == kphTelemetry) {
                     rtData.setSpeed(local.getSpeed());
                     rtData.setDistance(local.getDistance());
+                    rtData.setRouteDistance(local.getRouteDistance());
                     rtData.setLapDistance(local.getLapDistance());
                     rtData.setLapDistanceRemaining(local.getLapDistanceRemaining());
+                    fReceivedKphTelemetry = true;
                 }
                 if (dev == wattsTelemetry) {
                     rtData.setWatts(local.getWatts());
@@ -1658,17 +1695,34 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                 }
             }
 
+            // Compute speed from watts if in slope mode and simulation enabled
+            if (useSimulatedSpeed && status&RT_MODE_SLOPE) {
+                BicycleSimState newState(rtData);
+                SpeedDistance ret = bicycle.SampleSpeed(newState);
+
+                rtData.setSpeed(ret.v);
+
+                displaySpeed = ret.v;
+                distanceTick = ret.d;
+            } else {
+                distanceTick = displaySpeed / (5 * 3600); // assumes 200ms refreshrate
+            }
+
             // only update time & distance if actively running (not just connected, and not running but paused)
             if ((status&RT_RUNNING) && ((status&RT_PAUSED) == 0)) {
-                // Distance assumes current speed for the last second. from km/h to km/sec
-                double distanceTick = displaySpeed / (5 * 3600); // assumes 200ms refreshrate
+
                 displayDistance += distanceTick;
                 displayLapDistance += distanceTick;
                 displayLapDistanceRemaining -= distanceTick;
 
-
-                if (!(status&RT_MODE_ERGO) && (context->currentVideoSyncFile())) {
-                    displayWorkoutDistance = context->currentVideoSyncFile()->km + context->currentVideoSyncFile()->manualOffset;
+                if (!(status&RT_MODE_ERGO) && (context->currentVideoSyncFile()))
+                {
+                    displayWorkoutDistance = context->currentVideoSyncFile()->km;
+                    // If we reached the end of the RLV then stop
+                    if (displayWorkoutDistance >= context->currentVideoSyncFile()->Distance) {
+                        Stop(DEVICE_OK);
+                        return;
+                    }
                     // TODO : graphs to be shown at seek position
                 } else {
                     displayWorkoutDistance += distanceTick;
@@ -1682,23 +1736,46 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                 }
 
                 rtData.setDistance(displayDistance);
+                rtData.setRouteDistance(displayWorkoutDistance);
                 rtData.setLapDistance(displayLapDistance);
                 rtData.setLapDistanceRemaining(displayLapDistanceRemaining);
 
-                // Update location data
+                // Trust ergFile for location data, if available.
+                bool fAltitudeSet = false;
                 if (ergFile) {
-                    geolocation geoloc;
-                    if (ergFile->locationAt(displayWorkoutDistance * 1000, displayWorkoutLap, geoloc))
-                    {
-                        displayLatitude = geoloc.Lat();
-                        displayLongitude = geoloc.Long();
-                        displayAltitude = geoloc.Alt();
+                    if (!ergFile->StrictGradient) {
+                        // Attempt to obtain location and derived slope from altitude in ergfile.
+                        geolocation geoloc;
+                        if (ergFile->locationAt(displayWorkoutDistance * 1000, displayWorkoutLap, geoloc, slope)) {
+                            displayLatitude = geoloc.Lat();
+                            displayLongitude = geoloc.Long();
+                            displayAltitude = geoloc.Alt();
 
-                        rtData.setLatitude(displayLatitude);
-                        rtData.setLongitude(displayLongitude);
-                        rtData.setAltitude(displayAltitude);
+                            if (displayLatitude && displayLongitude) {
+                                rtData.setLatitude(displayLatitude);
+                                rtData.setLongitude(displayLongitude);
+                            }
+                            fAltitudeSet = true;
+                        }
                     }
+
+                    if (ergFile->StrictGradient || !fAltitudeSet) {
+                        slope = ergFile->gradientAt(displayWorkoutDistance * 1000, displayWorkoutLap);
+                    }
+
+                    rtData.setSlope(slope);
                 }
+
+                if (!fAltitudeSet) {
+                    // For classic rlv with no location data:
+                    // Estimate vertical change based upon time passed and slope.
+                    // Note this isn't exactly right but is very close - we should use the previous slope for the time passed.
+                    double altitudeDeltaMeters = slope * (10 * distanceTick); // ((slope / 100) * distanceTick) * 1000
+
+                    displayAltitude += altitudeDeltaMeters;
+                }
+
+                rtData.setAltitude(displayAltitude);
 
                 // time
                 total_msecs = session_elapsed_msec + session_time.elapsed();
@@ -1715,10 +1792,6 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                 if (ergFile) ergTimeRemaining = ergFile->Points.at(ergFile->rightPoint).x - load_msecs;
                 else ergTimeRemaining = 0;
 
-#if defined Q_OS_LINUX && QT_VERSION < 0x050600
-                // Sorry, lap alerts are only enabled for for Qt version 5.6 onwards on Linux
-                // see https://bugreports.qt.io/browse/QTBUG-40823
-#else
                 // alert when approaching end of lap
                 if (lapAudioEnabled && lapAudioThisLap) {
 
@@ -1735,7 +1808,6 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                         QSound::play(":audio/lap.wav");
                     }
                 }
-#endif
 
                 if(lapTimeRemaining < 0) {
                         if (ergFile) lapTimeRemaining =  ergFile->Duration - load_msecs;
@@ -1752,6 +1824,7 @@ void TrainSidebar::guiUpdate()           // refreshes the telemetry
                 rtData.setErgMsecsRemaining(ergTimeRemaining);
             } else {
                 rtData.setDistance(displayDistance);
+                rtData.setRouteDistance(displayWorkoutDistance);
                 rtData.setLapDistance(displayLapDistance);
                 rtData.setLapDistanceRemaining(displayLapDistanceRemaining);
                 rtData.setMsecs(session_elapsed_msec);
@@ -1909,8 +1982,10 @@ void TrainSidebar::diskUpdate()
 
     // convert from milliseconds to secondes
     total_msecs = session_elapsed_msec + session_time.elapsed();
-    secs = total_msecs;
-    secs /= 1000.0;
+    secs = round(total_msecs / 1000.0);
+
+    if (secs <= lastRecordSecs) return; // Avoid duplicates
+    lastRecordSecs = secs;
 
     // GoldenCheetah CVS Format "secs, cad, hr, km, kph, nm, watts, alt, lon, lat, headwind, slope, temp, interval, lrbalance, lte, rte, lps, rps, smo2, thb, o2hb, hhb\n";
 
@@ -1956,7 +2031,7 @@ void TrainSidebar::diskUpdate()
 
 void TrainSidebar::loadUpdate()
 {
-    int curLap;
+    int curLap = 0;
 
     // we hold our horses whilst calibration is taking place...
     if (calibrating) return;
@@ -1984,15 +2059,6 @@ void TrainSidebar::loadUpdate()
             context->notifySetNow(load_msecs);
         }
     } else {
-        slope = ergFile->gradientAt(displayWorkoutDistance*1000, curLap);
-
-        geolocation geoloc;
-        if (ergFile->locationAt(displayWorkoutDistance * 1000, curLap, geoloc))
-        {
-            displayLatitude = geoloc.Lat();
-            displayLongitude = geoloc.Long();
-            displayAltitude = geoloc.Alt();
-        }
 
         if(displayWorkoutLap != curLap)
         {
@@ -2474,7 +2540,7 @@ void TrainSidebar::adjustIntensity(int value)
                     add.val = last.val / from * to;
 
                     // recalibrate altitude if gradient changing
-                    if (context->currentErgFile()->format == CRS || context->currentErgFile()->format == CRS_LOC) add.y = last.y + ((add.x-last.x) * (add.val/100));
+                    if (context->currentErgFile()->format == CRS) add.y = last.y + ((add.x-last.x) * (add.val/100));
                     else add.y = add.val;
 
                     context->currentErgFile()->Points.insert(i, add);
@@ -2490,7 +2556,7 @@ void TrainSidebar::adjustIntensity(int value)
 
             // recalibrate altitude if in CRS mode
             p->val = p->val / from * to;
-            if (context->currentErgFile()->format == CRS || context->currentErgFile()->format == CRS_LOC) {
+            if (context->currentErgFile()->format == CRS) {
                 if (i) p->y = last.y + ((p->x-last.x) * (last.val/100));
             }
             else p->y = p->val;
@@ -2572,10 +2638,10 @@ MultiDeviceDialog::MultiDeviceDialog(Context *, TrainSidebar *traintool) : train
     buttons->addStretch();
     main->addLayout(buttons);
 
-    cancelButton = new QPushButton("Cancel", this);
+    cancelButton = new QPushButton(tr("Cancel"), this);
     buttons->addWidget(cancelButton);
 
-    applyButton = new QPushButton("Apply", this);
+    applyButton = new QPushButton(tr("Apply"), this);
     buttons->addWidget(applyButton);
 
     connect(cancelButton, SIGNAL(clicked()), this, SLOT(cancelClicked()));
@@ -2779,6 +2845,37 @@ void TrainSidebar::rrData(uint16_t  rrtime, uint8_t count, uint8_t bpm)
         recordFileStream << secs << ", " << bpm << ", " << rrtime << "\n";
     }
     //fprintf(stderr, "R-R: %d ms, HR=%d, count=%d\n", rrtime, bpm, count); fflush(stderr);
+}
+
+// VO2 Measurement data received
+void TrainSidebar::vo2Data(double rf, double rmv, double vo2, double vco2, double tv, double feo2)
+{
+    if (status&RT_RECORDING && vo2File == NULL && recordFile != NULL) {
+        QString vo2filename = recordFile->fileName().replace("csv", "vo2");
+
+        // setup the rr file
+        vo2File = new QFile(vo2filename);
+        if (!vo2File->open(QFile::WriteOnly | QFile::Truncate)) {
+            delete vo2File;
+            vo2File=NULL;
+        } else {
+
+            // CSV File header
+            QTextStream recordFileStream(vo2File);
+            recordFileStream << "secs, rf, rmv, vo2, vco2, tv, feo2\n";
+        }
+    }
+
+    // output a line if recording and file ready
+    if (status&RT_RECORDING && vo2File) {
+        QTextStream recordFileStream(vo2File);
+
+        // convert from milliseconds to secondes
+        double secs = double(session_elapsed_msec + session_time.elapsed()) / 1000.00;
+
+        // output a line
+        recordFileStream << secs << ", " << rf << ", " << rmv << ", " << vo2 << ", " << vco2 << ", " << tv << ", " << feo2 << "\n";
+    }
 }
 
 // connect/disconnect automatically when view changes

@@ -1,6 +1,15 @@
 <RCC>
     <qresource prefix="/">
         <file>webservice/httpserver.ini</file>
+        <file>sidebar/apps.png</file>
+        <file>sidebar/assess.png</file>
+        <file>sidebar/athlete.png</file>
+        <file>sidebar/plan.png</file>
+        <file>sidebar/prefs.png</file>
+        <file>sidebar/reflect.png</file>
+        <file>sidebar/sync.png</file>
+        <file>sidebar/train.png</file>
+        <file>sidebar/trends.png</file>
         <file>images/devices/garminusb.png</file>
         <file>images/devices/computrainer.png</file>
         <file>images/devices/kickr.png</file>
@@ -97,6 +106,7 @@
         <file>xml/charts.xml</file>
         <file>xml/metadata.xml</file>
         <file>xml/train-layout.xml</file>
+        <file>xml/video-layout.xml</file>
         <file>xml/diary-layout.xml</file>
         <file>xml/analysis-layout.xml</file>
         <file>xml/home-layout.xml</file>
@@ -165,6 +175,8 @@
         <file>images/configure.png</file>
         <file>web/googlemap/dark.css</file>
         <file>images/toolbar/cloud.png</file>
+        <file>images/services/strava_compatible.png</file>
+        <file>images/services/strava_connect.png</file>
         <file>images/services/cyclinganalytics.png</file>
         <file>images/services/dropbox.png</file>
         <file>images/services/googledrive.png</file>

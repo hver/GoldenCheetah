@@ -1863,7 +1863,7 @@ EditMetricDetailDialog::EditMetricDetailDialog(Context *context, LTMTool *ltmToo
     QStringList names = context->tab->rideNavigator()->logicalHeadings;
 
     // start with just a list of functions
-    list = DataFilter::builtins();
+    list = DataFilter::builtins(context);
 
     // ridefile data series symbols
     list += RideFile::symbols();
@@ -1900,7 +1900,7 @@ EditMetricDetailDialog::EditMetricDetailDialog(Context *context, LTMTool *ltmToo
     list << "best(cadence, 3600)";
     list << "best(speed, 3600)";
     list << "best(torque, 3600)";
-    list << "best(np, 3600)";
+    list << "best(isopower, 3600)";
     list << "best(xpower, 3600)";
     list << "best(vam, 3600)";
     list << "best(wpk, 3600)";
@@ -1953,14 +1953,30 @@ EditMetricDetailDialog::EditMetricDetailDialog(Context *context, LTMTool *ltmToo
     banisterTypeSelect->addItem(tr("Predicted CP (Watts)"),  BANISTER_CP);
     banisterTypeSelect->setCurrentIndex(metricDetail->stressType < 4 ? metricDetail->stressType : 2);
 
+    // banister performance metric
+    banisterPerfMetric = new QComboBox(this);
+    foreach(MetricDetail metric, ltmTool->metrics)
+        if (metric.metric != NULL && metric.metric->type() == RideMetric::Peak)
+            banisterPerfMetric->addItem(metric.name,  metric.symbol);
+    banisterPerfMetric->setCurrentIndex(banisterPerfMetric->findData(metricDetail->perfSymbol));
+
     banisterWidget = new QWidget(this);
     banisterWidget->setContentsMargins(0,0,0,0);
-    QHBoxLayout *banisterLayout = new QHBoxLayout(banisterWidget);
-    banisterLayout->setContentsMargins(0,0,0,0);
-    banisterLayout->setSpacing(5 *dpiXFactor);
-    banisterLayout->addWidget(new QLabel(tr("Curve Type"), this));
-    banisterLayout->addWidget(banisterTypeSelect);
+    QVBoxLayout *banisterLayout = new QVBoxLayout(banisterWidget);
 
+    QHBoxLayout *banisterTypeLayout = new QHBoxLayout();
+    banisterTypeLayout->setContentsMargins(0,0,0,0);
+    banisterTypeLayout->setSpacing(5 *dpiXFactor);
+    banisterTypeLayout->addWidget(new QLabel(tr("Curve Type"), this));
+    banisterTypeLayout->addWidget(banisterTypeSelect);
+    banisterLayout->addLayout(banisterTypeLayout);
+
+    QHBoxLayout *banisterPerfLayout = new QHBoxLayout();
+    banisterPerfLayout->setContentsMargins(0,0,0,0);
+    banisterPerfLayout->setSpacing(5 *dpiXFactor);
+    banisterPerfLayout->addWidget(new QLabel(tr("Perf. Metric"), this));
+    banisterPerfLayout->addWidget(banisterPerfMetric);
+    banisterLayout->addLayout(banisterPerfLayout);
 
     metricWidget = new QWidget(this);
     metricWidget->setContentsMargins(0,0,0,0);
@@ -2080,6 +2096,7 @@ EditMetricDetailDialog::EditMetricDetailDialog(Context *context, LTMTool *ltmToo
 
     QLabel *color = new QLabel(tr("Color"));
     curveColor = new QPushButton(this);
+    curveColor->setAutoDefault(false);
 
     QLabel *fill = new QLabel(tr("Fill curve"));
     fillCurve = new QCheckBox("", this);
@@ -2178,7 +2195,9 @@ EditMetricDetailDialog::EditMetricDetailDialog(Context *context, LTMTool *ltmToo
     QHBoxLayout *buttonLayout = new QHBoxLayout;
     buttonLayout->addStretch();
     applyButton = new QPushButton(tr("&OK"), this);
+    applyButton->setAutoDefault(false);
     cancelButton = new QPushButton(tr("&Cancel"), this);
+    cancelButton->setAutoDefault(false);
     buttonLayout->addWidget(cancelButton);
     buttonLayout->addWidget(applyButton);
     mainLayout->addLayout(buttonLayout);
@@ -2369,7 +2388,7 @@ EditMetricDetailDialog::banisterName()
     if (chooseBanister->isChecked() == false) return;
 
     // re-use bestSymbol like PMC does
-    metricDetail->bestSymbol = metricDetail->symbol;
+    metricDetail->bestSymbol = metricDetail->symbol+"_"+metricDetail->perfSymbol;
 
     // append type
     switch(banisterTypeSelect->currentIndex()) {
@@ -2589,7 +2608,10 @@ EditMetricDetailDialog::applyClicked()
     metricDetail->stack = stack->isChecked();
     metricDetail->trendtype = trendType->currentIndex();
     if (chooseStress->isChecked()) metricDetail->stressType = stressTypeSelect->currentIndex();
-    if (chooseBanister->isChecked()) metricDetail->stressType = banisterTypeSelect->currentIndex();
+    if (chooseBanister->isChecked()) {
+        metricDetail->stressType = banisterTypeSelect->currentIndex();
+        metricDetail->perfSymbol = banisterPerfMetric->currentData().toString();
+    }
     metricDetail->formula = formulaEdit->toPlainText();
     metricDetail->formulaType = static_cast<RideMetric::MetricType>(formulaType->itemData(formulaType->currentIndex()).toInt());
     metricDetail->measureGroup = measureGroupSelect->currentIndex();
@@ -2685,6 +2707,9 @@ LTMTool::setFilter(QStringList files)
 DataFilterEdit::DataFilterEdit(QWidget *parent, Context *context)
 : QTextEdit(parent), c(0), context(context)
 {
+    QFont font;
+    font.setFamily("Courier");
+    setFont(font);
     connect(this, SIGNAL(cursorPositionChanged()), this, SLOT(checkErrors()));
 }
 
@@ -2700,8 +2725,8 @@ DataFilterEdit::checkErrors()
     QStringList errors = checker.check(toPlainText());
     checker.colorSyntax(document(), textCursor().position()); // syntax + error highlighting
 
-    // need to fixup for errors!
-    // XXX next commit
+    // even if no errors need to tell folks
+    emit syntaxErrors(errors);
 }
 
 bool

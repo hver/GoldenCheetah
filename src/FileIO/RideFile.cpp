@@ -212,6 +212,25 @@ RideFile::wprimeData()
     return wprime_;
 }
 
+QString
+RideFile::sport() const
+{
+    // Run, Bike and Swim are standarized, all others are up to the user
+    if (isBike()) return "Bike";
+    if (isRun()) return "Run";
+    if (isSwim()) return "Swim";
+    return getTag("Sport","");
+}
+
+bool
+RideFile::isBike() const
+{
+    // for now we just look at Sport and default to Bike when Sport is not
+    // set and isRun and isSwim are false
+    return (getTag("Sport", "") == "Bike" || getTag("Sport", "") == tr("Bike")) ||
+           (getTag("Sport","") == "" && !isRun() && !isSwim());
+}
+
 bool
 RideFile::isRun() const
 {
@@ -224,8 +243,15 @@ RideFile::isRun() const
 bool
 RideFile::isSwim() const
 {
-    // for now we just look at Sport
-    return (getTag("Sport", "") == "Swim" || getTag("Sport", "") == tr("Swim"));
+    // for now we just look at Sport or presence of length data for lap swims
+    return (getTag("Sport", "") == "Swim" || getTag("Sport", "") == tr("Swim")) ||
+           (getTag("Sport","") == "" && xdata_.value("SWIM", NULL) != NULL);
+}
+
+bool
+RideFile::isXtrain() const
+{
+    return !isBike() && !isRun() && !isSwim();
 }
 
 // compatibility means used in e.g. R so no spaces in names,
@@ -288,7 +314,6 @@ RideFile::seriesName(SeriesType series, bool compat)
         case RideFile::rcontact: return QString("gct");
         case RideFile::gear: return QString("gearratio");
         case RideFile::index: return QString("index");
-        case RideFile::hrv: return QString("R_R");
         default: return QString("unknown");
         }
     } else {
@@ -345,7 +370,6 @@ RideFile::seriesName(SeriesType series, bool compat)
         case RideFile::gear: return QString(tr("Gear Ratio"));
         case RideFile::wbal: return QString(tr("W' Consumed"));
         case RideFile::index: return QString(tr("Sample Index"));
-        case RideFile::hrv: return QString(tr("R-R"));
         default: return QString(tr("Unknown"));
         }
     }
@@ -405,7 +429,6 @@ RideFile::colorFor(SeriesType series)
     case RideFile::vam:
     case RideFile::lon:
     case RideFile::lat:
-    case RideFile::hrv: return GColor(CHEARTRATE);
     default: return GColor(CPLOTMARKER);
     }
 }
@@ -466,7 +489,6 @@ RideFile::unitName(SeriesType series, Context *context)
     case RideFile::rvert: return QString(tr("cm"));
     case RideFile::rcontact: return QString(tr("ms"));
     case RideFile::gear: return QString(tr("ratio"));
-    case RideFile::hrv: return QString(tr("seconds"));
     default: return QString(tr("Unknown"));
     }
 }
@@ -918,19 +940,14 @@ RideFile *RideFileFactory::openRideFile(Context *context, QFile &file,
         // Update presens and filter HRV
         XDataSeries *series = result->xdata("HRV");
 
-        if (series)
-            {
-                result->setDataPresent(result->hrv, series->datapoints.count() > 0);
-                if (result->areDataPresent()->hrv)
-                    {
-                        double rrMax = appsettings->value(NULL, GC_RR_MAX, "2000.0").toDouble();
-                        double rrMin = appsettings->value(NULL, GC_RR_MIN, "270.0").toDouble();
-                        double rrFilt = appsettings->value(NULL, GC_RR_FILT, "0.2").toDouble();
-                        int rrWindow = appsettings->value(NULL, GC_RR_WINDOW, "20").toInt();
+        if (series && series->datapoints.count() > 0) {
+            double rrMax = appsettings->value(NULL, GC_RR_MAX, "2000.0").toDouble();
+            double rrMin = appsettings->value(NULL, GC_RR_MIN, "270.0").toDouble();
+            double rrFilt = appsettings->value(NULL, GC_RR_FILT, "0.2").toDouble();
+            int rrWindow = appsettings->value(NULL, GC_RR_WINDOW, "20").toInt();
 
-                        FilterHrv(series, rrMin, rrMax, rrFilt, rrWindow);
-                    }
-            }
+            FilterHrv(series, rrMin, rrMax, rrFilt, rrWindow);
+        }
 
         // calculate derived data series -- after data fixers applied above
         if (context) result->recalculateDerivedSeries();
@@ -1668,7 +1685,6 @@ RideFile::setDataPresent(SeriesType series, bool value)
         case wprime : dataPresent.wprime = value; break;
         case tcore : dataPresent.tcore = value; break;
         case wbal : break; // not present
-        case hrv : dataPresent.hrv = value; break;
         default:
         case none : break;
     }
@@ -1725,7 +1741,6 @@ RideFile::isDataPresent(SeriesType series)
         case gear : return dataPresent.gear; break;
         case interval : return dataPresent.interval; break;
         case tcore : return dataPresent.tcore; break;
-        case hrv : return dataPresent.hrv; break;
         default:
         case none : return false; break;
     }
@@ -1985,7 +2000,6 @@ RideFile::decimalsFor(SeriesType series)
         case wprime : return 0; break;
         case wbal : return 0; break;
         case tcore : return 2; break;
-        case hrv : return 0; break;
         default:
         case none : break;
     }
@@ -2490,12 +2504,13 @@ RideFile::recalculateDerivedSeries(bool force)
 
         if (!dataPresent.slope && dataPresent.alt && dataPresent.km) {
             if (lastP) {
-                double deltaDistance = (p->km - lastP->km) * 1000;
+                double deltaDistance = p->km - lastP->km;
                 double deltaAltitude = p->alt - lastP->alt;
                 if (deltaDistance>0) {
-                    p->slope = (deltaAltitude / deltaDistance) * 100;
+                    p->slope = deltaAltitude / (deltaDistance * 10); // * 100 for gradient, / 1000 to convert to meters
                 } else {
-                    p->slope = 0;
+                    // Repeat previous slope if distance hasn't changed.
+                    p->slope = lastP->slope;
                 }
                 if (p->slope > 40 || p->slope < -40) {
                     p->slope = lastP->slope;
@@ -2764,7 +2779,7 @@ RideFile::recalculateDerivedSeries(bool force)
 
         for(int i=0; i<hrArray.count(); i++) {
             double x_pred = a1 * x;
-            double v_pred = (a1  * a1 ) * (v+gamma);
+            double v_pred = (a1  * a1 ) * v + gamma;
 
             double z = hrArray[i];
             double c_vc = 2.0f *  b2 * x_pred + b1;
@@ -3239,7 +3254,8 @@ static struct {
 	{ "LEFTPPPB", RideFile::lpppb },
 	{ "RIGHTPPPB", RideFile::rpppb },
 	{ "LEFTPPPE", RideFile::lpppe },
-	{ "RIGHTPPPE", RideFile::rpppe },
+    { "RIGHTPPPE", RideFile::rpppe },
+    { "WBAL", RideFile::wbal },
 	{ "", RideFile::none  },
 };
 

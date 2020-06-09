@@ -35,7 +35,7 @@
 SearchBox::SearchBox(Context *context, QWidget *parent, bool nochooser)
     : QLineEdit(parent), context(context), parent(parent), filtered(false), nochooser(nochooser), active(false)
 {
-    setFixedHeight(21 *dpiYFactor);
+    setFixedHeight(28 *dpiYFactor);
     //clear button
     clearButton = new QToolButton(this);
     clearButton->setStyleSheet("QToolButton { border: none; padding: 0px; }");
@@ -153,7 +153,7 @@ SearchBox::configChanged(qint32)
     SpecialFields sp;
 
     // start with just a list of functions
-    list = DataFilter::builtins();
+    list = DataFilter::builtins(context);
 
     // add special functions (older code needs fixing !)
     list << "config(cranklength)";

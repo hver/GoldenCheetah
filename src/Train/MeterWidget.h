@@ -20,6 +20,7 @@
 #define _MeterWidget_h 1
 
 #include <QWidget>
+#include "Context.h"
 
 class MeterWidget : public QWidget
 {
@@ -53,12 +54,15 @@ class MeterWidget : public QWidget
     QString  m_Name;
     QWidget* m_container;
     QString  m_Source;
+    QWidget* m_VideoContainer;
+    QRegion  videoContainerRegion;
     float    m_RelativeWidth, m_RelativeHeight;
     float    m_RelativePosX, m_RelativePosY;
     int      m_PosX, m_PosY, m_Width, m_Height;
     float    m_RangeMin, m_RangeMax;
     float    m_Angle;
     int      m_SubRange;
+    bool     forceSquareRatio;
 
     QColor  m_MainColor;
     QColor  m_ScaleColor;
@@ -83,7 +87,6 @@ class TextMeterWidget : public MeterWidget
 {
   public:
     explicit TextMeterWidget(QString name, QWidget *parent = 0, QString Source = QString("None"));
-    virtual void ComputeSize();
     virtual void paintEvent(QPaintEvent* paintevent);
 };
 
@@ -109,5 +112,23 @@ class NeedleMeterWidget : public MeterWidget
     virtual void paintEvent(QPaintEvent* paintevent);
 };
 
+class ElevationMeterWidget : public MeterWidget
+{
+    Context* context;
+    QPolygon m_elevationPolygon;
+    double m_minX, m_maxX;
+    int m_savedWidth, m_savedHeight;
+
+  protected:
+    virtual void paintEvent(QPaintEvent* paintevent);
+
+    void lazyDimensionCompute(void);
+
+  public:
+    explicit ElevationMeterWidget(QString name, QWidget *parent = 0, QString Source = QString("None"), Context *context = NULL);
+    void setContext(Context* context) { this->context = context; }
+
+    float gradientValue;
+};
 
 #endif // _MeterWidget_h

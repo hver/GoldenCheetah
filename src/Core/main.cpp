@@ -19,6 +19,7 @@
 #include "Context.h"
 #include "Athlete.h"
 #include "MainWindow.h"
+#include "NewMainWindow.h"
 #include "Settings.h"
 #include "CloudService.h"
 #include "TrainDB.h"
@@ -26,14 +27,12 @@
 #include "GcUpgrade.h"
 #include "IdleTimer.h"
 #include "PowerProfile.h"
+#include "GcCrashDialog.h" // for versionHTML
 
 #include <QApplication>
 #include <QDesktopWidget>
 #include <QtGui>
 #include <QFile>
-#ifndef NOWEBKIT
-#include <QWebSettings>
-#endif
 #include <QMessageBox>
 #include "ChooseCyclistDialog.h"
 #ifdef GC_WANT_HTTP
@@ -45,6 +44,7 @@
 #endif
 #ifdef GC_WANT_PYTHON
 #include "PythonEmbed.h"
+#include "FixPySettings.h"
 #endif
 #include <signal.h>
 
@@ -53,9 +53,9 @@
 #include <X11/Xlib.h>
 #endif
 
-#if QT_VERSION > 0x050000
 #include <QStandardPaths>
-#endif
+
+#include <gsl/gsl_errno.h>
 
 //
 // bootstrap state
@@ -94,6 +94,9 @@ void terminate(int code)
 
     // tidy up static stuff (our globals) that are not tied
     // to a mainwindow instance (which will be deleted on close)
+#ifdef GC_WANT_PYTHON
+    delete fixPySettings;
+#endif
     delete appsettings;
     application->exit();
 
@@ -109,14 +112,9 @@ void terminate(int code)
 // redirect logging
 //
 #ifdef GC_WANT_HTTP
-#if QT_VERSION > 0x50000
 void myMessageOutput(QtMsgType type, const QMessageLogContext &, const QString &string)
  {
     const char *msg = string.toLocal8Bit().constData();
-#else
-void myMessageOutput(QtMsgType type, const char *msg)
- {
-#endif
      //in this function, you can write the message to any stream!
      switch (type) {
      default: // QtInfoMsg from 5.5 would arrive here
@@ -175,6 +173,16 @@ main(int argc, char *argv[])
 {
     int ret=2; // return code from qapplication, default to error
 
+#ifdef Q_OS_WIN
+    // On Windows without console, we try to attach to the parent's console
+    // and redirect stderr and stdout on success, to have a more Unix-like
+    // behavior when launched from cmd or PowerShell.
+    if (_fileno(stderr) == -2 && AttachConsole(ATTACH_PARENT_PROCESS )) {
+        freopen("CONOUT$", "w", stderr);
+        freopen("CONOUT$", "w", stdout);
+    }
+#endif
+
     //
     // PROCESS COMMAND LINE SWITCHES
     //
@@ -197,16 +205,26 @@ main(int argc, char *argv[])
     bool server = false;
     nogui = false;
     bool help = false;
+    bool newgui = false;
 
     // honour command line switches
     foreach (QString arg, sargs) {
 
-        // help or version requested
-        if (arg == "--help" || arg == "--version") {
+        // help, usage or version requested, basic information
+        if (arg == "--help" || arg == "--usage" || arg == "--version") {
 
             help = true;
-            fprintf(stderr, "GoldenCheetah %s (%d)\nusage: GoldenCheetah [[directory] athlete]\n\n", VERSION_STRING, VERSION_LATEST);
-            fprintf(stderr, "--help or --version to print this message and exit\n");
+            fprintf(stderr, "GoldenCheetah %s (%d)\n", VERSION_STRING, VERSION_LATEST);
+
+        }
+
+        // help or usage requrested, additional information
+        if (arg == "--help" || arg == "--usage") {
+
+            fprintf(stderr, "usage: GoldenCheetah [[directory] athlete]\n\n");
+            fprintf(stderr, "--help or --usage   to print this message and exit\n");
+            fprintf(stderr, "--version           to print detailed version information and exit\n");
+            fprintf(stderr, "--newgui            to open the new gui (WIP)\n");
 #ifdef GC_WANT_HTTP
             fprintf(stderr, "--server            to run as an API server\n");
 #endif
@@ -227,12 +245,25 @@ main(int argc, char *argv[])
             fprintf (stderr, "\nSpecify the folder and/or athlete to open on startup\n");
             fprintf(stderr, "If no parameters are passed it will reopen the last athlete.\n\n");
 
+        // version requested, additional information
+        } else if (arg == "--version") {
+
+            QString html = GcCrashDialog::versionHTML();
+            html.replace("</td><td>", ": "); // to maintain colums in one line
+            QString text = QTextDocumentFragment::fromHtml(html).toPlainText();
+            QByteArray ba = text.toLocal8Bit();
+            const char *c_str = ba.data();
+            fprintf(stderr, "\n%s\n\n", c_str);
+
+        } else if (arg == "--newgui") {
+            newgui = true;
+
         } else if (arg == "--server") {
 #ifdef GC_WANT_HTTP
-                nogui = server = true;
+            nogui = server = true;
 #else
-                fprintf(stderr, "HTTP support not compiled in, exiting.\n");
-                exit(1);
+            fprintf(stderr, "HTTP support not compiled in, exiting.\n");
+            exit(1);
 #endif
 
 #ifdef GC_WANT_PYTHON
@@ -320,6 +351,10 @@ main(int argc, char *argv[])
     unsetenv("QT_SCALE_FACTOR");
 #endif
 
+    // we don't want program aborts when maths routines don't know
+    // what to do. We may add our own error handler later.
+    gsl_set_error_handler_off();
+
     // create the application -- only ever ONE regardless of restarts
     application = new QApplication(argc, argv);
     //XXXIdleEventFilter idleFilter;
@@ -353,7 +388,6 @@ main(int argc, char *argv[])
     dpiXFactor = 1.0;
     dpiYFactor = 1.0;
 
-#if QT_VERSION_MAJOR >= 5
 #ifndef Q_OS_MAC // not needed on a Mac
 
     // We will set screen ratio factor for sizing when a screen
@@ -370,8 +404,8 @@ main(int argc, char *argv[])
     // being 1920 x 1080 rather than the native resolution
     if (desktop->screen()->devicePixelRatio() <= 1 && screenSize.width() > 2160) {
        // we're on a hidpi screen - lets create a multiplier - always use smallest
-       dpiXFactor = screenSize.width() / 1280;
-       dpiYFactor = screenSize.height() / 1024;
+       dpiXFactor = screenSize.width() / 1280.0;
+       dpiYFactor = screenSize.height() / 1024.0;
 
        if (dpiYFactor < dpiXFactor) dpiXFactor = dpiYFactor;
        else if (dpiXFactor < dpiYFactor) dpiYFactor = dpiXFactor;
@@ -398,9 +432,6 @@ main(int argc, char *argv[])
     } else {
        //qDebug()<<"geom:"<<QApplication::desktop()->geometry()<<"no need for hidpi scaling"<<"physcial DPI:"<<QApplication::desktop()->physicalDpiX()<<"logical DPI:"<<QApplication::desktop()->logicalDpiX();
     }
-#endif
-#else
-       //qDebug()<<"geom:"<<QApplication::desktop()->geometry()<<"no hidpi support available";
 #endif
 
     // scale up to user scale factor
@@ -461,12 +492,8 @@ main(int argc, char *argv[])
 #if defined(Q_OS_MACX)
         QString libraryPath="Library/GoldenCheetah";
 #elif defined(Q_OS_WIN)
-#if QT_VERSION > 0x050000 // windows and qt5
         QStringList paths=QStandardPaths::standardLocations(QStandardPaths::DataLocation);
         QString libraryPath = paths.at(0); 
-#else // windows not qt5
-        QString libraryPath=QDesktopServices::storageLocation(QDesktopServices::DataLocation) + "/GoldenCheetah";
-#endif // qt5
 #else // not windows or osx (must be Linux or OpenBSD)
         // Q_OS_LINUX et al
         QString libraryPath=".goldencheetah";
@@ -590,11 +617,7 @@ main(int argc, char *argv[])
             } else {
                 // switch off warnings if in gui mode
 #ifndef GC_WANT_ALLDEBUG
-#if QT_VERSION > 0x50000
                 qInstallMessageHandler(myMessageOutput);
-#else
-                qInstallMsgHandler(myMessageOutput);
-#endif
 #endif
             }
 
@@ -649,7 +672,7 @@ main(int argc, char *argv[])
 
         // lets attempt to open as asked/remembered
         bool anyOpened = false;
-        if (lastOpened != QVariant()) {
+        if (lastOpened != QVariant() && !newgui) {
             QStringList list = lastOpened.toStringList();
             QStringListIterator i(list);
             while (i.hasNext()) {
@@ -676,7 +699,7 @@ main(int argc, char *argv[])
         // ack, didn't manage to open an athlete
         // and the upgradeWarning was
         // lets ask the user which / create a new one
-        if (!anyOpened) {
+        if (!anyOpened && !newgui) {
             ChooseCyclistDialog d(home, true);
             d.setModal(true);
 
@@ -708,6 +731,12 @@ main(int argc, char *argv[])
             }
         }
 
+        // start with the new gui, a prototype in progress
+        if (newgui) {
+            NewMainWindow *newgui = new NewMainWindow(application);
+            newgui->show();
+        }
+
         ret=application->exec();
 
         // close trainDB
@@ -715,11 +744,6 @@ main(int argc, char *argv[])
 
         // reset QSettings (global & Athlete)
         appsettings->clearGlobalAndAthletes();
-
-#ifndef NOWEBKIT
-        // clear web caches (stop warning of WebKit leaks)
-        QWebSettings::clearMemoryCaches();
-#endif
 
     } while (restarting);
 

@@ -48,7 +48,7 @@ OverviewWindow::OverviewWindow(Context *context) :
 {
     setContentsMargins(0,0,0,0);
     setProperty("color", GColor(COVERVIEWBACKGROUND));
-    setProperty("nomenu", true);
+    //setProperty("nomenu", true);
     setShowTitle(false);
     setControls(NULL);
 
@@ -65,12 +65,6 @@ OverviewWindow::OverviewWindow(Context *context) :
     view->setRenderHint(QPainter::Antialiasing, true);
     view->setFrameStyle(QFrame::NoFrame);
     view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-#ifdef Q_OS_LINUX
-    if (QGLFormat::openGLVersionFlags().testFlag(QGLFormat::OpenGL_Version_2_0)) {
-        view->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
-        view->setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
-    }
-#endif
     view->setScene(scene);
 
     // layout
@@ -188,7 +182,7 @@ OverviewWindow::setConfiguration(QString config)
         newCard(tr("Heartrate Zones"), 1, 2, 11, Card::ZONE, RideFile::hr);
         newCard(tr("Climbing"), 1, 3, 5, Card::METRIC, "elevation_gain");
         newCard(tr("Cadence"), 1, 4, 5, Card::METRIC, "average_cad");
-        newCard(tr("Equivalent Power"), 1, 5, 5, Card::METRIC, "coggan_np");
+        newCard(tr("Work"), 1, 6, 5, Card::METRIC, "total_work");
 
         // column 2
         newCard(tr("RPE"), 2, 0, 9, Card::RPE);
@@ -200,7 +194,9 @@ OverviewWindow::setConfiguration(QString config)
         newCard(tr("Intensity"), 3, 0, 9, Card::METRIC, "coggan_if");
         newCard(tr("Power"), 3, 1, 5, Card::METRIC, "average_power");
         newCard(tr("Power Zones"), 3, 2, 11, Card::ZONE, RideFile::watts);
-        newCard(tr("Power Model"), 3, 3, 17);
+        newCard(tr("Equivalent Power"), 3, 3, 5, Card::METRIC, "coggan_np");
+        newCard(tr("Peak Power Index"), 3, 4, 5, Card::METRIC, "peak_power_index");
+        newCard(tr("Variability"), 3, 5, 5, Card::METRIC, "coggam_variability_index");
 
         // column 4
         newCard(tr("Distance"), 4, 0, 9, Card::METRIC, "total_distance");
@@ -558,6 +554,8 @@ static const QStringList timeInZonesWBAL = QStringList()
 void
 Card::setData(RideItem *item)
 {
+    if (item == NULL || item->ride() == NULL) return;
+
     // use ride colors in painting?
     ridecolor = item->color;
 
@@ -2747,7 +2745,7 @@ OverviewWindow::eventFilter(QObject *, QEvent *event)
 
             // min max width
             if (setcolumn < 800) setcolumn = 800;
-            if (setcolumn > 2400) setcolumn = 2400;
+            if (setcolumn > 4400) setcolumn = 4400;
 
             columns[stateData.xresize.column] = setcolumn;
 

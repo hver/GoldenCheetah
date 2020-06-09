@@ -32,12 +32,11 @@
 #include "ImagicController.h"
 #endif
 #include "ComputrainerController.h"
-#if QT_VERSION >= 0x050000
 #include "MonarkController.h"
 #include "KettlerController.h"
 #include "KettlerRacerController.h"
+#include "ErgofitController.h"
 #include "DaumController.h"
-#endif
 #include "ANTlocalController.h"
 #include "ANTChannel.h"
 #include "NullController.h"
@@ -49,6 +48,7 @@
 #include <QProgressBar>
 #include <QFileDialog>
 #include <QCommandLinkButton>
+#include <QScrollArea>
 
 class DeviceScanner;
 
@@ -97,6 +97,7 @@ class AddType : public QWizardPage
         void clicked(QString);
 
     private:
+        QScrollArea *scrollarea;
         AddDeviceWizard *wizard;
         QSignalMapper *mapper;
         QLabel *label;
@@ -214,22 +215,9 @@ class AddPairBTLE : public QWizardPage
         bool validatePage();
         void cleanupPage();
 
-    public slots:
-
-        void getChannelValues();
-        // we found a device on a channel
-        void channelInfo(int channel, int device_number, int device_id);
-        // we failed to find a device on the channel
-        void searchTimeout(int channel);
-
-        // user interactions
-        void sensorChanged(int channel); // sensor selection changed
     private:
         AddDeviceWizard *wizard;
         QTreeWidget *channelWidget;
-        QSignalMapper *signalMapper;
-        QTimer updateValues;
-        QString cyclist;
 
 };
 

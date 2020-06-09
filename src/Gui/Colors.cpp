@@ -229,6 +229,12 @@ void GCColor::setupColors()
 #endif
         { tr("Overview Background"), "COVERVIEWBACKGROUND", QColor(0,0,0) },
         { tr("Overview Card Background"), "CCARDBACKGROUND", QColor(52,52,52) },
+        { tr("VO2"), "CVO2", Qt::magenta },
+        { tr("Ventilation"), "CVENTILATION", Qt::cyan },
+        { tr("VCO2"), "CVCO2", Qt::green },
+        { tr("Tidal Volume"), "CTIDALVOLUME", Qt::yellow },
+        { tr("Respiratory Frequency"), "CRESPFREQUENCY", Qt::yellow },
+        { tr("FeO2"), "CFEO2", Qt::yellow },
         { "", "", QColor(0,0,0) },
     };
 
@@ -295,6 +301,7 @@ double GCColor::luminance(QColor color)
 
 QColor GCColor::invertColor(QColor bgColor)
 {
+    if (bgColor==QColor(Qt::darkGray)) return QColor(Qt::white); // darkGray is popular!
     return GCColor::luminance(bgColor) < 127 ? QColor(Qt::white) : QColor(Qt::black);
 }
 

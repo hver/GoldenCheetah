@@ -155,8 +155,14 @@ ride_tuple: string ':' string                                   {
                                                                      else if ($1 == "dbversion") jc->item.dbversion = $3.toInt();
                                                                      else if ($1 == "udbversion") jc->item.udbversion = $3.toInt();
                                                                      else if ($1 == "color") jc->item.color = QColor($3);
-                                                                     else if ($1 == "isRun") jc->item.isRun = $3.toInt();
-                                                                     else if ($1 == "isSwim") jc->item.isSwim = $3.toInt();
+                                                                     else if ($1 == "sport") {
+                                                                         jc->item.sport = ($3);
+                                                                         jc->item.isBike=jc->item.isRun=jc->item.isSwim=jc->item.isXtrain=false;
+                                                                         if ($3 == "Bike") jc->item.isBike = true;
+                                                                         else if ($3 == "Run") jc->item.isRun = true;
+                                                                         else if ($3 == "Swim") jc->item.isSwim = true;
+                                                                         else jc->item.isXtrain = true;
+                                                                     }
                                                                      else if ($1 == "present") jc->item.present = $3;
                                                                      else if ($1 == "overrides") jc->item.overrides_ = $3.split(",");
                                                                      else if ($1 == "weight") jc->item.weight = $3.toDouble();
@@ -426,6 +432,48 @@ static bool setup_mmp_durations()
 }
 static bool did_mmp_durations = setup_mmp_durations();
 
+// Fast constructon of common string. In the future we'll achieve this with a single variadic template function.
+QString ConstructNameNumberString(QString s0, QString name, QString s1, double num, QString s2)
+{
+    QString numStr;						
+    numStr.setNum(num, 'f', 5);
+    
+    QString m;
+    m.reserve(s0.length() + name.length() + s1.length() + numStr.length() + s2.length());
+    
+    m.append(s0);
+    m.append(name);
+    m.append(s1);
+    m.append(numStr);
+    m.append(s2);
+    
+    return m;
+}
+
+// Fast constructon of common string. In the future we'll achieve this with a single variadic template function.
+QString ConstructNameNumberNumberString(QString s0, QString name, QString s1, double num0, QString s2, double num1, QString s3)
+{
+    QString num0Str;
+    num0Str.setNum(num0, 'f', 5);
+
+	QString num1Str;
+    num1Str.setNum(num1, 'f', 5);
+    
+    QString m;
+    m.reserve(s0.length() + name.length() + s1.length() + num0Str.length() + s2.length() + num1Str.length() + s3.length());
+    
+    m.append(s0);
+    m.append(name);
+    m.append(s1);
+    m.append(num0Str);
+    m.append(s2);
+    m.append(num1Str);
+    m.append(s3);
+    
+    return m;
+}
+
+
 // save cache to disk
 //
 // if opendata is true then save in format for sending to the GC OpenData project
@@ -504,8 +552,7 @@ void RideCache::save(bool opendata, QString filename)
                 stream << "\t\t\"udbversion\":\"" <<item->udbversion <<"\",\n";
                 stream << "\t\t\"color\":\"" <<item->color.name() <<"\",\n";
                 stream << "\t\t\"present\":\"" <<item->present <<"\",\n";
-                stream << "\t\t\"isRun\":\"" <<item->isRun <<"\",\n";
-                stream << "\t\t\"isSwim\":\"" <<item->isSwim <<"\",\n";
+                stream << "\t\t\"sport\":\"" <<item->sport <<"\",\n";
                 stream << "\t\t\"weight\":\"" <<item->weight <<"\",\n";
 
                 if (item->zoneRange >= 0) stream << "\t\t\"zonerange\":\"" <<item->zoneRange <<"\",\n";
@@ -548,12 +595,11 @@ void RideCache::save(bool opendata, QString filename)
                                                                    << QString("%1").arg(item->stdvariances().value(index, 0.0f), 0, 'f', 5) <<"\"]";
                     } else if (item->counts()[index] == 0) {
                         // if count is 0 don't write it
-                        stream << "\t\t\t\"" << name << "\":\"" << QString("%1").arg(item->metrics()[index], 0, 'f', 5) <<"\"";
+						stream << ConstructNameNumberString(QString("\t\t\t\""), name,
+                            QString("\":\""), item->metrics()[index], QString("\""));
                     } else {
-
-                        // count is not 1, so lets write it
-                        stream << "\t\t\t\"" << name << "\":[\"" << QString("%1").arg(item->metrics()[index], 0, 'f', 5) <<"\",\""
-                                                                   << QString("%1").arg(item->counts()[index], 0, 'f', 5) <<"\"]";
+					    stream << ConstructNameNumberNumberString(QString("\t\t\t\""), name,
+                            QString("\":[\""), item->metrics()[index], QString("\",\""), item->counts()[index], QString("\"]"));
                     }
                 }
             }
@@ -782,12 +828,11 @@ void RideCache::save(bool opendata, QString filename)
 
                                 // if count is 0 don't write it
                                 } else if (interval->counts()[index] == 0) {
-                                    stream << "\t\t\t\t\"" << name << "\":\"" << QString("%1").arg(interval->metrics()[index], 0, 'f', 5) <<"\"";
+                                    stream << ConstructNameNumberString(QString("\t\t\t\""), name,
+                                        QString("\":\""), interval->metrics()[index], QString("\""));
                                 } else {
-
-                                    // count is not 1, so lets write it
-                                    stream << "\t\t\t\t\"" << name << "\":[\"" << QString("%1").arg(interval->metrics()[index], 0, 'f', 5) <<"\",\""
-                                                                               << QString("%1").arg(interval->counts()[index], 0, 'f', 5) <<"\"]";
+                                    stream << ConstructNameNumberNumberString(QString("\t\t\t\""), name,
+                                        QString("\":[\""), interval->metrics()[index], QString("\",\""), interval->counts()[index], QString("\"]"));
                                 }
                             }
                         }
@@ -879,15 +924,14 @@ APIWebService::listRides(QString athlete, HttpRequest &request, HttpResponse &re
         // first lets read in meta config
         QDir config(home.absolutePath() + "/" + athlete + "/config");
         QString metaConfig = config.canonicalPath()+"/metadata.xml";
-        if (QFile(metaConfig).exists()) {
+        if (!QFile(metaConfig).exists()) metaConfig = ":/xml/metadata.xml";
 
-            // params to readXML - we ignore them
-            QList<KeywordDefinition> keywordDefinitions;
-            QString colorfield;
-            QList<DefaultDefinition> defaultDefinitions;
+        // params to readXML - we ignore them
+        QList<KeywordDefinition> keywordDefinitions;
+        QString colorfield;
+        QList<DefaultDefinition> defaultDefinitions;
 
-            RideMetadata::readXML(metaConfig, keywordDefinitions, settings.metafields, colorfield, defaultDefinitions);
-        }
+        RideMetadata::readXML(metaConfig, keywordDefinitions, settings.metafields, colorfield, defaultDefinitions);
 
         SpecialFields sp;
 
