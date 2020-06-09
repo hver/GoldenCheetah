@@ -154,8 +154,6 @@ HelpWhatsThis::getText(GCHelp chapter) {
         return text.arg("Menu%20Bar_Edit").arg(tr("Fix Elevation Errors"));
     case MenuBar_Edit_FixGapsInRecording:
         return text.arg("Menu%20Bar_Edit").arg(tr("Fix Gaps in Recording"));
-    case MenuBar_Edit_FixStartInRecording:
-        return text.arg("Menu%20Bar_Edit").arg(tr("Remove Bad Values at Start"));
     case MenuBar_Edit_FixGPSErrors:
         return text.arg("Menu%20Bar_Edits").arg(tr("Fix GPS Errors"));
     case MenuBar_Edit_FixHRSpikes:

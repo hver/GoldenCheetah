@@ -168,14 +168,6 @@ RideImportWizard::RideImportWizard(RideAutoImportConfig *dirs, Context *context,
         // determine timerange in the past which should considerd in import
         QDate selectAfter = QDate::currentDate();
         switch(rule.getImportRule()) {
-        case RideAutoImportRule::importLast14days:
-        case RideAutoImportRule::importBackground14:
-            selectAfter = selectAfter.addDays(Q_INT64_C(-14));
-            break;
-        case RideAutoImportRule::importLast30days:
-        case RideAutoImportRule::importBackground30:
-            selectAfter = selectAfter.addDays(Q_INT64_C(-30));
-            break;
         case RideAutoImportRule::importLast90days:
         case RideAutoImportRule::importBackground90:
             selectAfter = selectAfter.addDays(Q_INT64_C(-90));
@@ -194,8 +186,6 @@ RideImportWizard::RideImportWizard(RideAutoImportConfig *dirs, Context *context,
         switch (rule.getImportRule()) {
 
         case RideAutoImportRule::importAll:
-        case RideAutoImportRule::importLast14days:
-        case RideAutoImportRule::importLast30days:
         case RideAutoImportRule::importLast90days:
         case RideAutoImportRule::importLast180days:
         case RideAutoImportRule::importLast360days:
@@ -215,14 +205,9 @@ RideImportWizard::RideImportWizard(RideAutoImportConfig *dirs, Context *context,
                     files.append(f.absoluteFilePath());
                     j++;
                     break;
-
-                case RideAutoImportRule::importLast14days:
-                case RideAutoImportRule::importLast30days:
                 case RideAutoImportRule::importLast90days:
                 case RideAutoImportRule::importLast180days:
                 case RideAutoImportRule::importLast360days:
-                case RideAutoImportRule::importBackground14:
-                case RideAutoImportRule::importBackground30:
                 case RideAutoImportRule::importBackground90:
                 case RideAutoImportRule::importBackground180:
                 case RideAutoImportRule::importBackground360:

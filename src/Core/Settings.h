@@ -177,7 +177,6 @@
 // data processor config
 #define GC_DPFG_TOLERANCE               "<global-general>dataprocess/fixgaps/tolerance"
 #define GC_DPFG_STOP                    "<global-general>dataprocess/fixgaps/stop"
-#define GC_DPFST_SECONDS                "<global-general>dataprocess/fixstart/seconds"
 #define GC_DPFS_MAX                     "<global-general>dataprocess/fixspikes/max"
 #define GC_DPFS_VARIANCE                "<global-general>dataprocess/fixspikes/variance"
 #define GC_DPTA                         "<global-general>dataprocess/torqueadjust/adjustment"

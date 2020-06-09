@@ -55,9 +55,9 @@
 
 // the mean athlete from opendata analysis
 // changed for runners numbers
-const double typical_CP = 282,
+const double typical_CP = 300,
              typical_WPrime = 12000,
-             typical_Pmax = 650;
+             typical_Pmax = 670;
 
 // used to control breaking into windows, but the performance is good enough
 // that we don't need to, and more data stops the fit from going bad.

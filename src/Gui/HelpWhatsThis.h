@@ -80,7 +80,6 @@ Q_OBJECT
                  MenuBar_Edit_EstimateHeadwindValues,
                  MenuBar_Edit_FixElevationErrors,
                  MenuBar_Edit_FixGapsInRecording,
-                 MenuBar_Edit_FixStartInRecording,
                  MenuBar_Edit_FixGPSErrors,
                  MenuBar_Edit_FixHRSpikes,
                  MenuBar_Edit_FixPowerSpikes,
